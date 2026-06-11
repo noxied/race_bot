@@ -1,15 +1,24 @@
 defmodule F1Bot.ExternalApi.SignalR.Client do
   @moduledoc """
-  A signalR client that establishes a websocket connection to the live timing API and handles
+  A SignalR client that establishes a websocket connection to the F1 live timing API and handles
   all received events by forming `F1Bot.F1Session.LiveTimingHandlers.Packet` structs and passing them to
   `F1Bot.F1Session.LiveTimingHandlers` for processing.
 
-  Useful documentation for SignalR 1.2:
-  https://blog.3d-logic.com/2015/03/29/signalr-on-the-wire-an-informal-description-of-the-signalr-protocol/
+  As of 2026 F1 uses ASP.NET Core SignalR (`/signalrcore`). The JSON hub protocol works as follows:
 
-  https://learn.microsoft.com/en-us/aspnet/core/signalr/introduction
-  https://github.com/SignalR/SignalR/blob/f3600c71f83d8312ad61bced0ca547795734d51e/src/Microsoft.AspNet.SignalR.Client/Connection.cs
-  https://github.com/SignalR/SignalR/blob/f3600c71f83d8312ad61bced0ca547795734d51e/src/Microsoft.AspNet.SignalR.Client/Transports/TransportHelper.cs
+    1. HTTP POST `/signalrcore/negotiate?negotiateVersion=1` -> connectionToken + AWSALB cookie
+    2. Open websocket `wss://.../signalrcore?id=<connectionToken>`
+    3. Send handshake `{"protocol":"json","version":1}\x1e`
+    4. Receive handshake ack `{}\x1e`
+    5. Invoke `{"type":1,"target":"Subscribe","arguments":[[topics]],"invocationId":"0"}\x1e`
+    6. Receive completion `{"type":3,"invocationId":"0","result":{<snapshot>}}\x1e` (initial state)
+    7. Receive feed `{"type":1,"target":"feed","arguments":[topic, data, timestamp]}\x1e`
+    8. Server/client keep-alive pings `{"type":6}\x1e`
+
+  Each message is terminated by the ASCII record separator 0x1e; a single websocket
+  frame may contain several concatenated messages.
+
+  https://github.com/dotnet/aspnetcore/blob/main/src/SignalR/docs/specs/HubProtocol.md
   """
   use GenServer
   require Logger
@@ -18,8 +27,15 @@ defmodule F1Bot.ExternalApi.SignalR.Client do
 
   @supervisor F1Bot.DynamicSupervisor
 
-  # Must be a string, otherwise pattern matching won't work - server responds with a string
+  # SignalR Core message terminator (ASCII record separator, 0x1e)
+  @rs "\x1e"
+
+  # Must be a string, otherwise pattern matching won't work - server echoes it back as a string
   @subscribe_command_id "0"
+
+  # No KeepAliveTimeout is provided by the Core negotiate response. The server pings
+  # roughly every 15s by default; allow a generous window before assuming a dead link.
+  @keepalive_timeout_sec 30
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -48,11 +64,6 @@ defmodule F1Bot.ExternalApi.SignalR.Client do
       cookies: cookies
     } = do_negotiate_signalr_conn(opts)
 
-    base_path = Keyword.fetch!(opts, :base_path)
-
-    # Sanity check, make sure server doesn't want us to connect to a different path than originally specified
-    ^base_path = Map.fetch!(negotiation_data, "Url")
-
     state =
       %{
         ws_client_pid: nil,
@@ -60,19 +71,17 @@ defmodule F1Bot.ExternalApi.SignalR.Client do
         hostname: Keyword.fetch!(opts, :hostname),
         scheme: Keyword.fetch!(opts, :scheme),
         port: Keyword.fetch!(opts, :port),
-        base_path: base_path,
+        base_path: Keyword.fetch!(opts, :base_path),
         user_agent: Keyword.fetch!(opts, :user_agent),
         signalr_params: %{
           conn_id: Map.fetch!(negotiation_data, "ConnectionId"),
           conn_token: Map.fetch!(negotiation_data, "ConnectionToken"),
-          conn_data: make_conn_data(opts),
           cookies: cookies
         },
         hub: Keyword.fetch!(opts, :hub),
         topics: Keyword.fetch!(opts, :topics),
-        negotiation_data: negotiation_data,
         last_keepalive: nil,
-        keepalive_timeout: Map.fetch!(negotiation_data, "KeepAliveTimeout")
+        keepalive_timeout: @keepalive_timeout_sec
       }
 
     state = do_connect_ws(state)
@@ -83,7 +92,7 @@ defmodule F1Bot.ExternalApi.SignalR.Client do
   def handle_call({:ws_handle_connected}, _from, state) do
     Logger.info("SignalR: Connected to websocket")
 
-    state = do_await_signalr_init(state)
+    state = do_send_handshake(state)
     {:reply, :ok, state}
   end
 
@@ -94,14 +103,21 @@ defmodule F1Bot.ExternalApi.SignalR.Client do
   end
 
   @impl true
+  def handle_info(:send_ping, state = %{state: :subscribed}) do
+    send_ws_message(%{type: 6})
+    {:noreply, state}
+  end
+
+  def handle_info(:send_ping, state), do: {:noreply, state}
+
+  @impl true
   def handle_info(
         :signalr_init_timeout,
-        state = %{state: :awaiting_signalr_init}
+        state = %{state: :awaiting_handshake}
       ) do
     {:stop, :signalr_init_timeout, state}
   end
 
-  @impl true
   def handle_info(
         :signalr_init_timeout,
         state = %{state: _anything}
@@ -117,7 +133,6 @@ defmodule F1Bot.ExternalApi.SignalR.Client do
     {:stop, :signalr_subscribe_timeout, state}
   end
 
-  @impl true
   def handle_info(
         :signalr_subscribe_timeout,
         state = %{state: _anything}
@@ -146,26 +161,14 @@ defmodule F1Bot.ExternalApi.SignalR.Client do
   end
 
   defp do_negotiate_signalr_conn(opts) do
-    extra_negotiation_opts = [conn_data: make_conn_data(opts)]
-
-    negotiation_opts = Keyword.merge(opts, extra_negotiation_opts)
-    {:ok, negotiation_data} = SignalR.Negotiation.negotiate(negotiation_opts)
-
+    {:ok, negotiation_data} = SignalR.Negotiation.negotiate(opts)
     negotiation_data
   end
 
-  defp make_conn_data(opts) do
-    [%{name: Keyword.fetch!(opts, :hub)}]
-  end
-
   defp do_connect_ws(state) do
+    # SignalR Core uses the negotiated connectionToken as the `id` query param.
     query =
-      %{
-        transport: "webSockets",
-        clientProtocol: "1.2",
-        connectionToken: state.signalr_params.conn_token,
-        connectionData: state.signalr_params.conn_data |> Jason.encode!()
-      }
+      %{id: state.signalr_params.conn_token}
       |> URI.encode_query()
 
     cookies_header =
@@ -183,7 +186,7 @@ defmodule F1Bot.ExternalApi.SignalR.Client do
         "http" -> "ws"
       end
 
-    uri = "#{ws_scheme}://#{state.hostname}:#{state.port}#{state.base_path}/connect?#{query}"
+    uri = "#{ws_scheme}://#{state.hostname}:#{state.port}#{state.base_path}?#{query}"
     ws_state = %{client_pid: self()}
     ws_opts = [name: SignalR.WSClient.name(), headers: headers]
 
@@ -201,32 +204,11 @@ defmodule F1Bot.ExternalApi.SignalR.Client do
     %{state | ws_client_pid: ws_client_pid, state: :connecting_ws}
   end
 
-  defp do_handle_message(_message = {:text, "{}"}, state) do
-    Logger.debug("SignalR: Received keep-alive")
-    %{state | last_keepalive: DateTime.utc_now()}
-  end
-
-  defp do_handle_message(_message = {:text, json}, state) do
-    data = Jason.decode!(json)
-    state = maybe_update_client_state(state, data)
-
-    if state.state == :subscribed do
-      maybe_handle_subscribe_response(state, data)
-      maybe_handle_subscription_message(state, data)
-    end
-
-    state
-  end
-
-  defp send_ws_message(_state, message) do
-    json = Jason.encode!(message)
-    SignalR.WSClient.send({:text, json})
-  end
-
-  # Set up a timer that waits for the first message to be sent by the server, indicating successful connection
-  defp do_await_signalr_init(state) do
-    :timer.send_after(3000, :signalr_init_timeout)
-    %{state | state: :awaiting_signalr_init}
+  # SignalR Core: send the protocol handshake immediately after the socket opens.
+  defp do_send_handshake(state) do
+    send_ws_message(%{protocol: "json", version: 1})
+    :timer.send_after(5000, :signalr_init_timeout)
+    %{state | state: :awaiting_handshake}
   end
 
   defp do_subscribe_signalr(state) do
@@ -234,80 +216,64 @@ defmodule F1Bot.ExternalApi.SignalR.Client do
     Logger.info("SignalR: Subscribing to topics: #{topics_str}")
 
     msg = %{
-      # Reverse engineered from official app
-      H: state.hub,
-      # Reverse engineered from official app
-      M: "Subscribe",
-      # Reverse engineered from official app
-      A: [state.topics],
-      # Can be anything, likely an auto-incrementing per-connection ID of messages
-      I: @subscribe_command_id
+      type: 1,
+      target: "Subscribe",
+      arguments: [state.topics],
+      invocationId: @subscribe_command_id
     }
 
-    send_ws_message(state, msg)
-    :timer.send_after(3000, :signalr_subscribe_timeout)
+    send_ws_message(msg)
+    :timer.send_after(5000, :signalr_subscribe_timeout)
 
     %{state | state: :awaiting_signalr_subscription}
   end
 
-  defp maybe_update_client_state(
-         state = %{state: :awaiting_signalr_init},
-         _message = %{"C" => _, "S" => 1}
-       ) do
-    Logger.info("SignalR: connection initialized")
-    do_subscribe_signalr(state)
+  defp send_ws_message(message) do
+    # Each SignalR Core message is terminated by the 0x1e record separator.
+    json = Jason.encode!(message) <> @rs
+    SignalR.WSClient.send({:text, json})
   end
 
-  defp maybe_update_client_state(
-         state = %{state: :awaiting_signalr_subscription},
-         _message = %{"I" => @subscribe_command_id, "R" => current_data}
-       ) do
-    subscribed_topics =
-      current_data
-      |> Map.keys()
-      |> Enum.join(",")
-
-    Logger.info("SignalR: status changed to subscribed. Topics: #{subscribed_topics}")
-    :timer.send_interval(1000, :check_keepalive)
-    %{state | state: :subscribed, last_keepalive: DateTime.utc_now()}
+  # A single websocket text frame may bundle several 0x1e-separated messages.
+  defp do_handle_message({:text, raw}, state) do
+    raw
+    |> String.split(@rs, trim: true)
+    |> Enum.reduce(state, &handle_frame/2)
   end
 
-  defp maybe_update_client_state(state, _message), do: state
+  defp do_handle_message(_other, state), do: state
 
-  defp maybe_handle_subscription_message(
-         _state,
-         _message = %{"M" => messages}
-       ) do
-    for m <- messages do
-      # method is "feed"
-      # method = Map.fetch!(m, "M")
-      [topic, data, timestamp | _] = Map.fetch!(m, "A")
-
-      topic = String.trim_trailing(topic, ".z")
-
-      timestamp = F1Bot.DataTransform.Parse.parse_iso_timestamp(timestamp)
-
-      payload = %Packet{
-        topic: topic,
-        data: data,
-        timestamp: timestamp
-      }
-
-      Logger.debug("Received data on topic #{topic}")
-
-      process_packet(payload)
+  defp handle_frame(frame, state) do
+    case Jason.decode(frame) do
+      {:ok, data} -> dispatch_message(data, state)
+      {:error, _} -> state
     end
   end
 
-  defp maybe_handle_subscription_message(_state, _message) do
-    # IO.inspect(message)
-    :ignore
+  # Handshake acknowledgement: an empty object (`{}`) means success.
+  defp dispatch_message(data, state = %{state: :awaiting_handshake})
+       when map_size(data) == 0 do
+    Logger.info("SignalR: handshake complete")
+    do_subscribe_signalr(state)
   end
 
-  defp maybe_handle_subscribe_response(
-         _state,
-         _message = %{"R" => results, "I" => @subscribe_command_id}
+  defp dispatch_message(%{"error" => err}, state = %{state: :awaiting_handshake}) do
+    Logger.error("SignalR: handshake rejected: #{inspect(err)}")
+    state
+  end
+
+  # Keep-alive ping (type 6) from the server.
+  defp dispatch_message(%{"type" => 6}, state) do
+    %{state | last_keepalive: DateTime.utc_now()}
+  end
+
+  # Completion of the Subscribe invocation (type 3) carries the initial snapshot.
+  defp dispatch_message(
+         %{"type" => 3, "invocationId" => @subscribe_command_id} = msg,
+         state
        ) do
+    results = Map.get(msg, "result") || %{}
+
     for {topic, data} <- results do
       payload = %Packet{
         topic: topic,
@@ -318,11 +284,45 @@ defmodule F1Bot.ExternalApi.SignalR.Client do
 
       process_packet(payload)
     end
+
+    subscribed_topics = results |> Map.keys() |> Enum.join(",")
+    Logger.info("SignalR: status changed to subscribed. Topics: #{subscribed_topics}")
+
+    :timer.send_interval(1000, :check_keepalive)
+    :timer.send_interval(10_000, :send_ping)
+
+    %{state | state: :subscribed, last_keepalive: DateTime.utc_now()}
   end
 
-  defp maybe_handle_subscribe_response(_state, _message) do
-    :ignore
+  # Live feed message (type 1, target "feed").
+  defp dispatch_message(
+         %{"type" => 1, "target" => "feed", "arguments" => arguments},
+         state
+       ) do
+    [topic, data, timestamp | _] = arguments
+
+    topic = String.trim_trailing(topic, ".z")
+    timestamp = F1Bot.DataTransform.Parse.parse_iso_timestamp(timestamp)
+
+    payload = %Packet{
+      topic: topic,
+      data: data,
+      timestamp: timestamp
+    }
+
+    Logger.debug("Received data on topic #{topic}")
+    process_packet(payload)
+
+    %{state | last_keepalive: DateTime.utc_now()}
   end
+
+  # Server requested the connection be closed (type 7).
+  defp dispatch_message(%{"type" => 7} = msg, state) do
+    Logger.warning("SignalR: server closed the connection: #{inspect(msg)}")
+    state
+  end
+
+  defp dispatch_message(_message, state), do: state
 
   defp process_packet(payload = %Packet{}) do
     options = %ProcessingOptions{

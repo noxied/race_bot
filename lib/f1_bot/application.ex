@@ -31,8 +31,8 @@ defmodule F1Bot.Application do
         [
           scheme: "https",
           hostname: "livetiming.formula1.com",
-          base_path: "/signalr",
-          user_agent: "",
+          base_path: "/signalrcore",
+          user_agent: "BestHTTP",
           port: 443,
           hub: "Streaming",
           topics:
