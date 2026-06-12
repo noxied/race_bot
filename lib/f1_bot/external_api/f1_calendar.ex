@@ -24,6 +24,12 @@ defmodule F1Bot.ExternalApi.F1Calendar do
     GenServer.call(__MODULE__, {:upcoming, kinds, now})
   end
 
+  @doc """
+  Session start times for the race weekend whose race falls on `date` (a Date),
+  as a map of `kind => DateTime` (UTC). Empty if no match.
+  """
+  def weekend_sessions(date), do: GenServer.call(__MODULE__, {:weekend_sessions, date})
+
   @impl true
   def init(_) do
     if F1Bot.get_env(:external_apis_enabled, true), do: send(self(), :load)
@@ -55,6 +61,24 @@ defmodule F1Bot.ExternalApi.F1Calendar do
       state.sessions
       |> Enum.filter(fn s -> s.kind in kinds and DateTime.compare(s.start, now) == :gt end)
       |> Enum.sort_by(& &1.start, DateTime)
+
+    {:reply, result, state}
+  end
+
+  def handle_call({:weekend_sessions, date}, _from, state) do
+    gp =
+      Enum.find_value(state.sessions, fn s ->
+        if s.kind == :race and DateTime.to_date(s.start) == date, do: s.gp_name
+      end)
+
+    result =
+      if gp do
+        state.sessions
+        |> Enum.filter(&(&1.gp_name == gp))
+        |> Map.new(fn s -> {s.kind, s.start} end)
+      else
+        %{}
+      end
 
     {:reply, result, state}
   end

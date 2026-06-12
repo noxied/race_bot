@@ -21,7 +21,9 @@ defmodule F1Bot.ExternalApi.F1DB do
     circuits: "f1db-circuits.json",
     countries: "f1db-countries.json",
     constructors: "f1db-constructors.json",
-    constructor_standings: "f1db-seasons-constructor-standings.json"
+    drivers: "f1db-drivers.json",
+    constructor_standings: "f1db-seasons-constructor-standings.json",
+    driver_standings: "f1db-seasons-driver-standings.json"
   ]
 
   # ---- Public API ---------------------------------------------------------
@@ -39,6 +41,12 @@ defmodule F1Bot.ExternalApi.F1DB do
 
   @doc "Constructor standings for the given season year."
   def constructor_standings(year), do: GenServer.call(__MODULE__, {:constructor_standings, year})
+
+  @doc "Driver standings for the given season year."
+  def driver_standings(year), do: GenServer.call(__MODULE__, {:driver_standings, year})
+
+  @doc "The current season year (per the loaded calendar)."
+  def current_season, do: GenServer.call(__MODULE__, :current_season)
 
   @doc "Force a refresh of the dataset (async)."
   def refresh, do: send(__MODULE__, :load)
@@ -88,6 +96,10 @@ defmodule F1Bot.ExternalApi.F1DB do
     {:reply, do_next_race(state.data, now), state}
   end
 
+  def handle_call(:current_season, _from, state) do
+    {:reply, {:ok, current_year(state.data)}, state}
+  end
+
   def handle_call({:constructor_standings, year}, _from, state) do
     standings =
       state.data.constructor_standings
@@ -97,6 +109,22 @@ defmodule F1Bot.ExternalApi.F1DB do
         %{
           position: s["positionText"],
           constructor: constructor_name(state.data, s["constructorId"]),
+          points: s["points"]
+        }
+      end)
+
+    {:reply, {:ok, %{year: year, standings: standings}}, state}
+  end
+
+  def handle_call({:driver_standings, year}, _from, state) do
+    standings =
+      state.data.driver_standings
+      |> Enum.filter(&(&1["year"] == year))
+      |> Enum.sort_by(&(&1["positionDisplayOrder"] || 9999))
+      |> Enum.map(fn s ->
+        %{
+          position: s["positionText"],
+          driver: driver_name(state.data, s["driverId"]),
           points: s["points"]
         }
       end)
@@ -198,6 +226,7 @@ defmodule F1Bot.ExternalApi.F1DB do
 
   defp grand_prix_name(data, id), do: lookup_name(data.grands_prix, id)
   defp constructor_name(data, id), do: lookup_name(data.constructors, id)
+  defp driver_name(data, id), do: lookup_name(data.drivers, id)
 
   defp lookup_name(index, id) do
     case Map.get(index, id) do
@@ -218,6 +247,7 @@ defmodule F1Bot.ExternalApi.F1DB do
         |> Map.update!(:circuits, &index_by_id/1)
         |> Map.update!(:countries, &index_by_id/1)
         |> Map.update!(:constructors, &index_by_id/1)
+        |> Map.update!(:drivers, &index_by_id/1)
 
       {:ok, data}
     end

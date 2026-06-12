@@ -79,6 +79,15 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Common do
     end
   end
 
+  @doc "Discord short date+time timestamp from a `DateTime`."
+  def session_timestamp_dt(dt), do: "<t:#{DateTime.to_unix(dt)}:f>"
+
+  @doc "Discord relative timestamp from a `DateTime`."
+  def relative_timestamp_dt(dt), do: "<t:#{DateTime.to_unix(dt)}:R>"
+
+  @doc "Whether a `DateTime` is in the past relative to `now`."
+  def past_dt?(dt, now), do: DateTime.compare(dt, now) == :lt
+
   # Returns {unix_seconds, has_time?} or :error.
   defp to_unix(date_str, time_str) do
     case date_str && Date.from_iso8601(date_str) do

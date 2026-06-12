@@ -121,6 +121,39 @@ defmodule F1Bot.ExternalApi.Discord.I18n do
       de: "F1-Kalender %{year}",
       es: "Calendario F1 %{year}"
     },
+    # ---- /teams & /drivers ----
+    teams_cmd_desc: %{
+      en: "Show the constructor championship standings",
+      pt: "Mostra a classificação do campeonato de construtores",
+      fr: "Affiche le classement du championnat des constructeurs",
+      it: "Mostra la classifica del campionato costruttori",
+      de: "Zeigt die Konstrukteurs-WM-Wertung",
+      es: "Muestra la clasificación del campeonato de constructores"
+    },
+    teams_title: %{
+      en: "%{year} Constructor Standings",
+      pt: "Classificação de Construtores %{year}",
+      fr: "Classement Constructeurs %{year}",
+      it: "Classifica Costruttori %{year}",
+      de: "Konstrukteurswertung %{year}",
+      es: "Clasificación de Constructores %{year}"
+    },
+    drivers_cmd_desc: %{
+      en: "Show the driver championship standings",
+      pt: "Mostra a classificação do campeonato de pilotos",
+      fr: "Affiche le classement du championnat des pilotes",
+      it: "Mostra la classifica del campionato piloti",
+      de: "Zeigt die Fahrer-WM-Wertung",
+      es: "Muestra la clasificación del campeonato de pilotos"
+    },
+    drivers_title: %{
+      en: "%{year} Driver Standings",
+      pt: "Classificação de Pilotos %{year}",
+      fr: "Classement Pilotes %{year}",
+      it: "Classifica Piloti %{year}",
+      de: "Fahrerwertung %{year}",
+      es: "Clasificación de Pilotos %{year}"
+    },
     # ---- /help ----
     help_cmd_desc: %{
       en: "List the available commands and how to use them",
