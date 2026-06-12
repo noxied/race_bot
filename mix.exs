@@ -111,9 +111,10 @@ defmodule F1Bot.MixProject do
       {:fresh, "~> 0.4.4"},
       {
         :nostrum,
-        # Includes https://github.com/Kraigie/nostrum/pull/522
-        git: "https://github.com/Kraigie/nostrum",
-        ref: "4fabfc5bf59878fdde118acd686f6a5e075b5f8e",
+        # Fork of Kraigie/nostrum@4fabfc5 (which includes PR #522) with an extra
+        # fix so safe_atom_map doesn't crash the shard on integer ETF map keys.
+        git: "https://github.com/noxied/nostrum",
+        ref: "f82c2ef96023597a47385d4f26dea5c18ade1121",
         runtime: false
       },
       {:certifi, "~> 2.9"},
