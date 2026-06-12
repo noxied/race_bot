@@ -48,7 +48,10 @@ config :f1_bot,
   discord_channel_ids_radios:
     System.get_env("DISCORD_CHANNEL_IDS_RADIOS", "") |> str_to_list.() |> list_to_int.(),
   discord_server_ids_commands:
-    System.get_env("DISCORD_SERVER_IDS_COMMANDS", "") |> str_to_list.() |> list_to_int.()
+    System.get_env("DISCORD_SERVER_IDS_COMMANDS", "") |> str_to_list.() |> list_to_int.(),
+  # Minutes-before-session to post start alerts (e.g. "60,30,15"); empty = off.
+  session_alert_minutes:
+    System.get_env("SESSION_ALERT_MINUTES", "60,30,15") |> str_to_list.() |> list_to_int.()
 
 if config_env() == :prod do
   unless demo_mode_enabled do

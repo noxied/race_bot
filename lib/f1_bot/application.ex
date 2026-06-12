@@ -25,7 +25,9 @@ defmodule F1Bot.Application do
         F1BotWeb.Supervisor,
         F1Bot.Replay.Server,
         F1Bot.TranscriberService,
-        F1Bot.ExternalApi.F1DB
+        F1Bot.ExternalApi.F1DB,
+        F1Bot.ExternalApi.F1Calendar,
+        F1Bot.SessionAlerts
       ]
       |> add_if_feature_flag_enabled(:connect_to_signalr, {
         F1Bot.ExternalApi.SignalR.Client,
