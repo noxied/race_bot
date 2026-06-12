@@ -138,6 +138,74 @@ defmodule F1Bot.ExternalApi.Discord.I18n do
       de: "F1 Bot — Befehle",
       es: "F1 Bot — Comandos"
     },
+    weather_cmd_desc: %{
+      en: "Show live track weather (during a session)",
+      pt: "Mostra a meteorologia da pista ao vivo (durante uma sessão)",
+      fr: "Affiche la météo de la piste en direct (pendant une séance)",
+      it: "Mostra il meteo in pista in diretta (durante una sessione)",
+      de: "Zeigt das aktuelle Streckenwetter (während einer Session)",
+      es: "Muestra el tiempo en pista en directo (durante una sesión)"
+    },
+    weather_title: %{
+      en: "Weather Conditions",
+      pt: "Condições Meteorológicas",
+      fr: "Conditions Météo",
+      it: "Condizioni Meteo",
+      de: "Wetterbedingungen",
+      es: "Condiciones Meteorológicas"
+    },
+    weather_air: %{
+      en: "Air Temperature",
+      pt: "Temperatura do Ar",
+      fr: "Température de l'air",
+      it: "Temperatura aria",
+      de: "Lufttemperatur",
+      es: "Temperatura del aire"
+    },
+    weather_track: %{
+      en: "Track Temperature",
+      pt: "Temperatura da Pista",
+      fr: "Température piste",
+      it: "Temperatura pista",
+      de: "Streckentemperatur",
+      es: "Temperatura de la pista"
+    },
+    weather_wind: %{en: "Wind", pt: "Vento", fr: "Vent", it: "Vento", de: "Wind", es: "Viento"},
+    weather_humidity: %{
+      en: "Humidity",
+      pt: "Humidade",
+      fr: "Humidité",
+      it: "Umidità",
+      de: "Luftfeuchtigkeit",
+      es: "Humedad"
+    },
+    weather_pressure: %{
+      en: "Pressure",
+      pt: "Pressão",
+      fr: "Pression",
+      it: "Pressione",
+      de: "Luftdruck",
+      es: "Presión"
+    },
+    weather_rain: %{en: "Rain", pt: "Chuva", fr: "Pluie", it: "Pioggia", de: "Regen", es: "Lluvia"},
+    weather_rain_yes: %{en: "Yes", pt: "Sim", fr: "Oui", it: "Sì", de: "Ja", es: "Sí"},
+    weather_rain_no: %{en: "No", pt: "Não", fr: "Non", it: "No", de: "Nein", es: "No"},
+    weather_footer: %{
+      en: "Real-time F1 information",
+      pt: "Informação F1 em tempo real",
+      fr: "Informations F1 en temps réel",
+      it: "Informazioni F1 in tempo reale",
+      de: "F1-Informationen in Echtzeit",
+      es: "Información F1 en tiempo real"
+    },
+    weather_none: %{
+      en: "No live weather right now (no active session).",
+      pt: "Sem meteorologia ao vivo de momento (não há sessão ativa).",
+      fr: "Pas de météo en direct pour le moment (aucune séance active).",
+      it: "Nessun meteo in diretta al momento (nessuna sessione attiva).",
+      de: "Derzeit kein Live-Wetter (keine aktive Session).",
+      es: "No hay tiempo en directo ahora mismo (sin sesión activa)."
+    },
     ping_cmd_desc: %{
       en: "Check the bot's latency",
       pt: "Verifica a latência do bot",

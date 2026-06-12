@@ -66,6 +66,7 @@ defmodule F1Bot.ExternalApi.Discord.Commands do
       }),
       info_command("nextrace", :nextrace_cmd_desc),
       info_command("calendar", :calendar_cmd_desc),
+      info_command("weather", :weather_cmd_desc),
       info_command("ping", :ping_cmd_desc),
       info_command("help", :help_cmd_desc)
     ]
@@ -144,6 +145,10 @@ defmodule F1Bot.ExternalApi.Discord.Commands do
 
   defp handle_interaction(interaction = %Interaction{data: %{name: "calendar"}}) do
     Commands.Calendar.handle_interaction(interaction)
+  end
+
+  defp handle_interaction(interaction = %Interaction{data: %{name: "weather"}}) do
+    Commands.Weather.handle_interaction(interaction)
   end
 
   defp handle_interaction(interaction = %Interaction{data: %{name: "ping"}}) do
