@@ -12,6 +12,7 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Help do
   @commands [
     {"/nextrace", :nextrace_cmd_desc},
     {"/calendar", :calendar_cmd_desc},
+    {"/ping", :ping_cmd_desc},
     {"/help", :help_cmd_desc},
     {"/f1summary", "Driver's fastest lap, top speed and stint info (current session)"},
     {"/f1graph", "Graph for the current F1 session"}

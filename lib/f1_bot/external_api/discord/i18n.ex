@@ -138,6 +138,22 @@ defmodule F1Bot.ExternalApi.Discord.I18n do
       de: "F1 Bot — Befehle",
       es: "F1 Bot — Comandos"
     },
+    ping_cmd_desc: %{
+      en: "Check the bot's latency",
+      pt: "Verifica a latência do bot",
+      fr: "Vérifie la latence du bot",
+      it: "Controlla la latenza del bot",
+      de: "Zeigt die Latenz des Bots an",
+      es: "Comprueba la latencia del bot"
+    },
+    ping_pong: %{
+      en: "🏓 Pong! Latency: %{ms} ms",
+      pt: "🏓 Pong! Latência: %{ms} ms",
+      fr: "🏓 Pong ! Latence : %{ms} ms",
+      it: "🏓 Pong! Latenza: %{ms} ms",
+      de: "🏓 Pong! Latenz: %{ms} ms",
+      es: "🏓 Pong! Latencia: %{ms} ms"
+    },
     help_public_note: %{
       en: "Tip: add `public:True` to any command to post the answer in the channel for everyone.",
       pt: "Dica: adiciona `public:True` a qualquer comando para publicar a resposta no canal para todos.",
