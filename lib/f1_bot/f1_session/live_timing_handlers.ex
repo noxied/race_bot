@@ -68,6 +68,15 @@ defmodule F1Bot.F1Session.LiveTimingHandlers do
     {:ok, result}
   end
 
+  # Allow post-session Race Control messages (e.g. late penalties, investigations)
+  # to keep flowing after a session ends/finalises. The live timing feed goes quiet
+  # on its own once F1 stops broadcasting, so this self-bounds without an arbitrary
+  # timer. `nil` (no session at all) is still ignored to avoid stray messages.
+  defp process_for_topic(session, packet = %Packet{topic: "RaceControlMessages"}, options)
+       when session.session_status in [:finalised, :ends] do
+    LiveTimingHandlers.RaceControlMessages.process_packet(session, packet, options)
+  end
+
   # Ignore all other packets when session is inactive
   defp process_for_topic(session, packet = %Packet{}, options = %ProcessingOptions{})
        when session.session_status in @session_inactive_statuses do
