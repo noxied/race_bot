@@ -58,6 +58,27 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Common do
     end
   end
 
+  @doc """
+  Whether a session is already in the past relative to `now`.
+  With a known time it is exact; with a date only, it counts as past only once
+  the whole day is over (so same-day sessions aren't prematurely struck through).
+  """
+  def session_past?(date_str, time_str, now) do
+    case to_unix(date_str, time_str) do
+      {unix, true} ->
+        unix < DateTime.to_unix(now)
+
+      {_unix, false} ->
+        case Date.from_iso8601(date_str) do
+          {:ok, date} -> Date.compare(date, DateTime.to_date(now)) == :lt
+          _ -> false
+        end
+
+      :error ->
+        false
+    end
+  end
+
   # Returns {unix_seconds, has_time?} or :error.
   defp to_unix(date_str, time_str) do
     case date_str && Date.from_iso8601(date_str) do

@@ -63,6 +63,14 @@ defmodule F1Bot.ExternalApi.Discord.I18n do
       de: "Nächstes Rennen",
       es: "Próxima Carrera"
     },
+    tz_footer: %{
+      en: "Times shown in your local timezone",
+      pt: "Horas no teu fuso horário local",
+      fr: "Heures affichées dans ton fuseau horaire local",
+      it: "Orari mostrati nel tuo fuso orario locale",
+      de: "Zeiten in deiner lokalen Zeitzone",
+      es: "Horas mostradas en tu zona horaria local"
+    },
     nextrace_none: %{
       en: "No upcoming race found in the calendar.",
       pt: "Não há nenhuma corrida futura no calendário.",

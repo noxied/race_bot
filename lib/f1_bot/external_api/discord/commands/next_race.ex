@@ -45,59 +45,55 @@ defmodule F1Bot.ExternalApi.Discord.Commands.NextRace do
 
   defp build_embed(race, locale) do
     flag = Common.flag_emoji(race.country_code)
-    title = String.trim("#{flag} #{I18n.t(:nextrace_title, locale)} — #{race.grand_prix}")
+    now = DateTime.utc_now()
 
-    fields =
+    description =
       [
-        %{inline: true, name: I18n.t(:field_round, locale), value: to_string(race.round)},
-        %{inline: true, name: I18n.t(:field_circuit, locale), value: circuit_value(race)}
+        "*#{race.official_name}*",
+        "",
+        location_line(race),
+        "🏆 #{I18n.t(:field_round, locale)} #{race.round}  ·  ⏱️ #{Common.relative_timestamp(race.date, race.time)}",
+        "",
+        "**#{I18n.t(:field_sessions, locale)}:**",
+        format_sessions(race.sessions, locale, now)
       ]
-      |> maybe_add_field(
-        I18n.t(:field_countdown, locale),
-        Common.relative_timestamp(race.date, race.time),
-        true
-      )
-      |> maybe_add_field(
-        I18n.t(:field_sessions, locale),
-        format_sessions(race.sessions, locale),
-        false
-      )
+      |> Enum.reject(&(&1 == nil))
+      |> Enum.join("\n")
 
     %{
       type: "rich",
       color: @color,
-      title: title,
-      description: race.official_name,
-      fields: fields
+      title: String.trim("#{flag} #{I18n.t(:nextrace_title, locale)} — #{race.grand_prix}"),
+      description: description,
+      footer: %{text: I18n.t(:tz_footer, locale)}
     }
     |> maybe_put_image(circuit_image_url(race.circuit_layout_id))
+  end
+
+  defp location_line(%{place_name: place, country: country})
+       when is_binary(place) and is_binary(country),
+       do: "🌍 #{place}, #{country}"
+
+  defp location_line(%{country: country}) when is_binary(country), do: "🌍 #{country}"
+  defp location_line(_), do: nil
+
+  defp format_sessions(sessions, locale, now) do
+    @session_order
+    |> Enum.filter(&Map.has_key?(sessions, &1))
+    |> Enum.map_join("\n", fn key ->
+      %{date: date, time: time} = sessions[key]
+      icon = if key == :race, do: "🏎️", else: "🗓️"
+      line = "#{icon} **#{I18n.session_label(key, locale)}** — #{Common.session_timestamp(date, time)}"
+
+      if Common.session_past?(date, time, now), do: "~~#{line}~~", else: line
+    end)
   end
 
   defp circuit_image_url(nil), do: nil
 
   defp circuit_image_url(layout_id),
-    do: "https://wsrv.nl/?url=#{@circuit_svg_base}/#{layout_id}.svg&output=png&w=640"
+    do: "https://wsrv.nl/?url=#{@circuit_svg_base}/#{layout_id}.svg&output=png&w=450"
 
   defp maybe_put_image(embed, nil), do: embed
   defp maybe_put_image(embed, url), do: Map.put(embed, :image, %{url: url})
-
-  defp circuit_value(%{circuit: circuit, place_name: place}) when is_binary(place),
-    do: "#{circuit}\n#{place}"
-
-  defp circuit_value(%{circuit: circuit}), do: circuit
-
-  defp maybe_add_field(fields, _name, nil, _inline), do: fields
-  defp maybe_add_field(fields, _name, "", _inline), do: fields
-
-  defp maybe_add_field(fields, name, value, inline),
-    do: fields ++ [%{inline: inline, name: name, value: value}]
-
-  defp format_sessions(sessions, locale) do
-    @session_order
-    |> Enum.filter(&Map.has_key?(sessions, &1))
-    |> Enum.map_join("\n", fn key ->
-      %{date: date, time: time} = sessions[key]
-      "**#{I18n.session_label(key, locale)}** — #{Common.session_timestamp(date, time)}"
-    end)
-  end
 end
