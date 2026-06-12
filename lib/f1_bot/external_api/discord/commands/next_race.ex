@@ -10,6 +10,10 @@ defmodule F1Bot.ExternalApi.Discord.Commands.NextRace do
   # F1 red
   @color 0xE10600
 
+  # f1db hosts circuit layouts as SVG. Discord can't render SVG, so we proxy
+  # through wsrv.nl which rasterises to PNG on the fly.
+  @circuit_svg_base "raw.githubusercontent.com/f1db/f1db/main/src/assets/circuits/white-outline"
+
   @session_order [
     :free_practice_1,
     :free_practice_2,
@@ -66,7 +70,16 @@ defmodule F1Bot.ExternalApi.Discord.Commands.NextRace do
       description: race.official_name,
       fields: fields
     }
+    |> maybe_put_image(circuit_image_url(race.circuit_layout_id))
   end
+
+  defp circuit_image_url(nil), do: nil
+
+  defp circuit_image_url(layout_id),
+    do: "https://wsrv.nl/?url=#{@circuit_svg_base}/#{layout_id}.svg&output=png&w=640"
+
+  defp maybe_put_image(embed, nil), do: embed
+  defp maybe_put_image(embed, url), do: Map.put(embed, :image, %{url: url})
 
   defp circuit_value(%{circuit: circuit, place_name: place}) when is_binary(place),
     do: "#{circuit}\n#{place}"

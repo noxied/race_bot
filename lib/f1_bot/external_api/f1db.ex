@@ -168,6 +168,7 @@ defmodule F1Bot.ExternalApi.F1DB do
       official_name: race["officialName"],
       grand_prix: grand_prix_name(data, race["grandPrixId"]),
       circuit: circuit["name"] || circuit["fullName"] || race["circuitId"],
+      circuit_layout_id: race["circuitLayoutId"],
       place_name: circuit["placeName"],
       country: country["name"],
       country_code: country["alpha2Code"],
