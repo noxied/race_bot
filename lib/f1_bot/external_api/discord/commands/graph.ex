@@ -36,8 +36,18 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Graph do
   defp do_create_chart(interaction, options, internal_args) do
     flags = Map.get(internal_args, :flags, [])
 
-    {:ok, info} = F1Bot.session_info()
+    case F1Bot.session_info() do
+      {:error, :no_session_info} ->
+        flags
+        |> Response.make_followup_message("There is no active F1 session right now.")
+        |> Response.send_followup_response(interaction)
 
+      {:ok, info} ->
+        do_create_chart(interaction, options, flags, info)
+    end
+  end
+
+  defp do_create_chart(interaction, options, flags, info) do
     chart_response =
       case options.metric do
         :gap ->

@@ -35,13 +35,24 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Summary do
   defp do_create_summary(interaction, options, internal_args) do
     flags = Map.get(internal_args, :flags, [])
 
+    case F1Bot.session_info() do
+      {:error, :no_session_info} ->
+        flags
+        |> Response.make_followup_message("There is no active F1 session right now.")
+        |> Response.send_followup_response(interaction)
+
+      {:ok, session_info} ->
+        do_create_summary(interaction, options, flags, session_info)
+    end
+  end
+
+  defp do_create_summary(interaction, options, flags, session_info) do
     use_emojis =
       case Permissions.everyone_has_external_emojis?(interaction.guild_id) do
         {:ok, perm} -> perm
         _ -> false
       end
 
-    {:ok, session_info} = F1Bot.session_info()
     track_status_history = F1Bot.track_status_history()
 
     embed_results =
