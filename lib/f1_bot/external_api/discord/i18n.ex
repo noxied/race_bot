@@ -81,28 +81,20 @@ defmodule F1Bot.ExternalApi.Discord.I18n do
       es: "Circuito"
     },
     field_sessions: %{
-      en: "Sessions (UTC)",
-      pt: "Sessões (UTC)",
-      fr: "Séances (UTC)",
-      it: "Sessioni (UTC)",
-      de: "Sessions (UTC)",
-      es: "Sesiones (UTC)"
+      en: "Sessions",
+      pt: "Sessões",
+      fr: "Séances",
+      it: "Sessioni",
+      de: "Sessions",
+      es: "Sesiones"
     },
     field_countdown: %{
-      en: "Starts in",
-      pt: "Começa em",
-      fr: "Débute dans",
-      it: "Inizia tra",
-      de: "Beginnt in",
-      es: "Empieza en"
-    },
-    countdown_value: %{
-      en: "%{days}d %{hours}h %{minutes}m",
-      pt: "%{days}d %{hours}h %{minutes}m",
-      fr: "%{days}j %{hours}h %{minutes}m",
-      it: "%{days}g %{hours}h %{minutes}m",
-      de: "%{days}T %{hours}h %{minutes}m",
-      es: "%{days}d %{hours}h %{minutes}m"
+      en: "Starts",
+      pt: "Começa",
+      fr: "Début",
+      it: "Inizio",
+      de: "Beginn",
+      es: "Comienza"
     },
     # ---- /calendar ----
     calendar_cmd_desc: %{

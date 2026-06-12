@@ -19,6 +19,7 @@ defmodule F1Bot.ExternalApi.F1DB do
     races: "f1db-races.json",
     grands_prix: "f1db-grands-prix.json",
     circuits: "f1db-circuits.json",
+    countries: "f1db-countries.json",
     constructors: "f1db-constructors.json",
     constructor_standings: "f1db-seasons-constructor-standings.json"
   ]
@@ -156,6 +157,9 @@ defmodule F1Bot.ExternalApi.F1DB do
   end
 
   defp enrich_race(data, race) do
+    circuit = Map.get(data.circuits, race["circuitId"], %{})
+    country = Map.get(data.countries, circuit["countryId"], %{})
+
     %{
       year: race["year"],
       round: race["round"],
@@ -163,7 +167,10 @@ defmodule F1Bot.ExternalApi.F1DB do
       time: race["time"],
       official_name: race["officialName"],
       grand_prix: grand_prix_name(data, race["grandPrixId"]),
-      circuit: circuit_name(data, race["circuitId"]),
+      circuit: circuit["name"] || circuit["fullName"] || race["circuitId"],
+      place_name: circuit["placeName"],
+      country: country["name"],
+      country_code: country["alpha2Code"],
       sessions: race_sessions(race)
     }
   end
@@ -189,7 +196,6 @@ defmodule F1Bot.ExternalApi.F1DB do
   end
 
   defp grand_prix_name(data, id), do: lookup_name(data.grands_prix, id)
-  defp circuit_name(data, id), do: lookup_name(data.circuits, id)
   defp constructor_name(data, id), do: lookup_name(data.constructors, id)
 
   defp lookup_name(index, id) do
@@ -209,6 +215,7 @@ defmodule F1Bot.ExternalApi.F1DB do
         parsed
         |> Map.update!(:grands_prix, &index_by_id/1)
         |> Map.update!(:circuits, &index_by_id/1)
+        |> Map.update!(:countries, &index_by_id/1)
         |> Map.update!(:constructors, &index_by_id/1)
 
       {:ok, data}

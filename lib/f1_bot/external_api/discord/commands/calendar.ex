@@ -32,7 +32,8 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Calendar do
     lines =
       Enum.map_join(races, "\n", fn r ->
         round = String.pad_leading(to_string(r.round), 2)
-        "`#{round}` **#{r.grand_prix}** — #{r.date}"
+        flag = Common.flag_emoji(r.country_code)
+        "`#{round}` #{flag} **#{r.grand_prix}** — #{Common.date_timestamp(r.date)}"
       end)
 
     %{
