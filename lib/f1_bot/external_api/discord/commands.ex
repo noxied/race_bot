@@ -8,6 +8,7 @@ defmodule F1Bot.ExternalApi.Discord.Commands do
   alias Nostrum.Struct.Interaction
   alias F1Bot.ExternalApi.Discord.Commands
   alias F1Bot.ExternalApi.Discord.Commands.Definition
+  alias F1Bot.ExternalApi.Discord.I18n
 
   @type internal_args :: %{
           required(:flags) => [Commands.Response.flags()]
@@ -62,8 +63,33 @@ defmodule F1Bot.ExternalApi.Discord.Commands do
         description:
           "Display driver's fastest lap, top speed and detailed stint information (responds publicly)",
         default_permission: false
-      })
+      }),
+      info_command("nextrace", :nextrace_cmd_desc),
+      info_command("calendar", :calendar_cmd_desc),
+      info_command("help", :help_cmd_desc)
     ]
+  end
+
+  # An informational command that responds privately by default, with an optional
+  # `public` flag to post in the channel. Description is localized per Discord locale.
+  defp info_command(name, desc_key) do
+    %{
+      name: name,
+      description: I18n.t(desc_key, :en),
+      description_localizations: I18n.localizations(desc_key),
+      options: [public_option()]
+    }
+  end
+
+  defp public_option do
+    %{
+      # 5 = BOOLEAN
+      type: 5,
+      name: "public",
+      description: I18n.t(:opt_public_desc, :en),
+      description_localizations: I18n.localizations(:opt_public_desc),
+      required: false
+    }
   end
 
   def handle_event({:READY, _, _}) do
@@ -109,6 +135,18 @@ defmodule F1Bot.ExternalApi.Discord.Commands do
     }
 
     Commands.Summary.handle_interaction(interaction, args)
+  end
+
+  defp handle_interaction(interaction = %Interaction{data: %{name: "nextrace"}}) do
+    Commands.NextRace.handle_interaction(interaction)
+  end
+
+  defp handle_interaction(interaction = %Interaction{data: %{name: "calendar"}}) do
+    Commands.Calendar.handle_interaction(interaction)
+  end
+
+  defp handle_interaction(interaction = %Interaction{data: %{name: "help"}}) do
+    Commands.Help.handle_interaction(interaction)
   end
 
   defp handle_interaction(unknown_interaction = %Interaction{data: %{name: name}}) do

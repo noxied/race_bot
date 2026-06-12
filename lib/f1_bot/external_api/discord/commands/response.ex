@@ -40,6 +40,16 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Response do
     }
   end
 
+  def make_embed_message(flags, embeds) when is_list(flags) and is_list(embeds) do
+    %{
+      type: @interaction_callback_type.channel_message,
+      data: %{
+        embeds: embeds,
+        flags: combine_flags(flags)
+      }
+    }
+  end
+
   def make_deferred_message(flags) when is_list(flags) do
     %{
       type: @interaction_callback_type.deferred_channel_message,
