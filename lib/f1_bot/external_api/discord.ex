@@ -1,6 +1,6 @@
 defmodule F1Bot.ExternalApi.Discord do
   @moduledoc ""
-  @callback post_message(String.t()) :: :ok | {:error, any()}
+  @callback post_message(String.t() | tuple()) :: :ok | {:error, any()}
 
   def post_message(message_or_tuple) do
     impl = F1Bot.get_env(:discord_api_module, F1Bot.ExternalApi.Discord.Console)
@@ -37,5 +37,14 @@ defmodule F1Bot.ExternalApi.Discord do
   def default_emoji(:flag_yellow), do: "<:f1_flag_yellow:918888979808518174>"
   def default_emoji(:flag_red), do: "<:f1_flag_red:918888944450547803>"
   def default_emoji(:flag_chequered), do: "<:f1_flag_chequered:919209710647935037>"
+  # Track status / extra flags (defaults are the deployment server's emojis;
+  # override with DISCORD_EMOJI_<KEY>).
+  def default_emoji(:flag_green), do: "<:green:1398564440416321556>"
+  def default_emoji(:flag_blue), do: "<:blue:1398564423320469554>"
+  def default_emoji(:flag_yellow_red), do: "<:yellowred:1398564447601168424>"
+  def default_emoji(:flag_black_white), do: "<:blackwhite:1398564421894279228>"
+  def default_emoji(:flag_black_orange), do: "<:blackorange:1398564419944058962>"
+  def default_emoji(:vsc), do: "<:vsc:1398564444182806639>"
+  def default_emoji(:safety_car), do: "<a:SafetyCar:1398564418186510418>"
   def default_emoji(_), do: nil
 end

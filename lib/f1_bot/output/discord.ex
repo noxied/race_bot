@@ -26,7 +26,8 @@ defmodule F1Bot.Output.Discord do
           "driver:tyre_change",
           "driver:transcript",
           "session_status:started",
-          "race_control:message"
+          "race_control:message",
+          "track_status:changed"
         ],
         25_000,
         false
@@ -226,11 +227,30 @@ defmodule F1Bot.Output.Discord do
         },
         state
       ) do
-    session_name = "#{gp_name} - #{session_type}"
+    embed = %{
+      type: "rich",
+      color: 0xE10600,
+      title: "🏁 #{gp_name} — #{session_type}",
+      description: "Session just started"
+    }
 
-    F1Bot.ExternalApi.Discord.post_message(
-      ":traffic_light: **#{session_name} just started** :traffic_light:"
-    )
+    F1Bot.ExternalApi.Discord.post_message({:embed, embed})
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info(
+        _e = %{
+          scope: "track_status:changed",
+          payload: %{status: status}
+        },
+        state
+      ) do
+    case track_status_embed(status) do
+      nil -> :ok
+      embed -> F1Bot.ExternalApi.Discord.post_message({:embed, embed})
+    end
 
     {:noreply, state}
   end
@@ -273,6 +293,35 @@ defmodule F1Bot.Output.Discord do
   def handle_info(msg, state) do
     Logger.info("Ignored output message: #{inspect(msg)}")
     {:noreply, state}
+  end
+
+  # Compact, colour-coded embeds for headline track states.
+  defp track_status_embed(:all_clear),
+    do: status_embed(:flag_green, "🟢", "GREEN", "Track clear", 0x2ECC71)
+
+  defp track_status_embed(:yellow_flag),
+    do: status_embed(:flag_yellow, "🟡", "YELLOW FLAG", "Caution on track", 0xF1C40F)
+
+  defp track_status_embed(:red_flag),
+    do: status_embed(:flag_red, "🟥", "RED FLAG", "Session stopped", 0xE74C3C)
+
+  defp track_status_embed(:virtual_safety_car),
+    do: status_embed(:vsc, "🟡", "VIRTUAL SAFETY CAR", "VSC deployed", 0xF39C12)
+
+  defp track_status_embed(:safety_car),
+    do: status_embed(:safety_car, "🚗", "SAFETY CAR", "Safety Car deployed", 0xE67E22)
+
+  defp track_status_embed(_), do: nil
+
+  defp status_embed(emoji_key, fallback, title, detail, color) do
+    emoji = F1Bot.ExternalApi.Discord.get_emoji_or_default(emoji_key, fallback)
+
+    %{
+      type: "rich",
+      color: color,
+      title: "#{emoji} #{title}",
+      description: detail
+    }
   end
 
   defp server_via() do
