@@ -55,7 +55,14 @@ if config_env() == :prod do
     config :f1_bot,
       connect_to_signalr: true,
       start_discord: true,
-      discord_command_mode: :global,
+      # "global" (default) = commands in every server, ~1h to propagate.
+      # "guild" = instant updates, only in the servers listed in
+      # DISCORD_SERVER_IDS_COMMANDS. Handy for development.
+      discord_command_mode:
+        (case System.get_env("DISCORD_COMMAND_MODE", "global") do
+           "guild" -> :guild
+           _ -> :global
+         end),
       discord_api_module: F1Bot.ExternalApi.Discord.Live
   end
 
