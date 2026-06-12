@@ -230,8 +230,8 @@ defmodule F1Bot.Output.Discord do
     embed = %{
       type: "rich",
       color: 0xE10600,
-      title: "🏁 #{gp_name} — #{session_type}",
-      description: "Session just started"
+      title: "🚦 #{gp_name} — #{session_type}",
+      description: "🚦 Session just started"
     }
 
     F1Bot.ExternalApi.Discord.post_message({:embed, embed})
