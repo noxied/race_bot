@@ -32,7 +32,7 @@ defmodule F1Bot.Output.Discord do
         false
       )
 
-    state = %{}
+    state = %{session_type: nil, segments_done: 0}
 
     {:ok, state}
   end
@@ -226,10 +226,15 @@ defmodule F1Bot.Output.Discord do
         },
         state
       ) do
+    state =
+      if state.session_type == session_type,
+        do: state,
+        else: %{state | session_type: session_type, segments_done: 0}
+
     embed = %{
       type: "rich",
       color: 0xE10600,
-      title: "🚦 #{gp_name} - #{session_type}",
+      title: "🚦 #{gp_name} - #{segment_label(session_type, state.segments_done + 1)}",
       description: "Session just started"
     }
 
@@ -268,6 +273,7 @@ defmodule F1Bot.Output.Discord do
         F1Bot.ExternalApi.Discord.post_message("#{emoji} #{source_prefix(source)}#{message}")
     end
 
+    state = maybe_post_quali_results(state, flag)
     {:noreply, state}
   end
 
@@ -337,6 +343,33 @@ defmodule F1Bot.Output.Discord do
   defp source_prefix(:stewards), do: "FIA Stewards: "
   defp source_prefix(:stewards_correction), do: "FIA Stewards correction: "
   defp source_prefix(_), do: ""
+
+  defp quali?(type), do: type in ["Qualifying", "Sprint Qualifying", "Sprint Shootout"]
+
+  defp segment_label("Qualifying", n), do: "Qualifying - Q#{n}"
+  defp segment_label("Sprint Qualifying", n), do: "Sprint Qualifying - SQ#{n}"
+  defp segment_label("Sprint Shootout", n), do: "Sprint Shootout - SQ#{n}"
+  defp segment_label(type, _n), do: type
+
+  # The chequered flag ends each qualifying segment (immune to red-flag
+  # restarts, which never produce a chequered). Post that segment's leaderboard
+  # and advance the counter.
+  defp maybe_post_quali_results(state, :chequered) do
+    if quali?(state.session_type) do
+      segment = state.segments_done + 1
+
+      case F1Bot.Output.QualifyingResults.embed(segment) do
+        nil -> :ok
+        embed -> F1Bot.ExternalApi.Discord.post_message({:embed, embed})
+      end
+
+      %{state | segments_done: segment}
+    else
+      state
+    end
+  end
+
+  defp maybe_post_quali_results(state, _flag), do: state
 
   defp server_via() do
     __MODULE__
