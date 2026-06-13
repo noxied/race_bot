@@ -250,10 +250,8 @@ defmodule F1Bot.Output.Discord do
         },
         state
       ) do
-    case highlight_spec(flag, message) do
-      {emoji_key, fallback, label, color} ->
-        emoji = F1Bot.ExternalApi.Discord.get_emoji_or_default(emoji_key, fallback)
-
+    case highlight(flag, message, source) do
+      {emoji, label, color} ->
         embed = %{
           type: "rich",
           color: color,
@@ -264,7 +262,7 @@ defmodule F1Bot.Output.Discord do
         F1Bot.ExternalApi.Discord.post_message({:embed, embed})
 
       nil ->
-        emoji = F1Bot.ExternalApi.Discord.get_emoji_or_default(:announcement, "📢")
+        emoji = resolve_emoji(:announcement, "📢")
         F1Bot.ExternalApi.Discord.post_message("#{emoji} #{source_prefix(source)}#{message}")
     end
 
@@ -277,33 +275,51 @@ defmodule F1Bot.Output.Discord do
     {:noreply, state}
   end
 
-  # Highlight spec {emoji_key, fallback_emoji, label, colour} for flags and
-  # safety cars; nil means the message stays as plain text.
-  defp highlight_spec(:green, _msg), do: {:flag_green, "🟢", "GREEN FLAG", 0x2ECC71}
-  defp highlight_spec(:yellow, _msg), do: {:flag_yellow, "🟡", "YELLOW FLAG", 0xF1C40F}
-
-  defp highlight_spec(:"double yellow", _msg),
-    do: {:flag_yellow_red, "🟡", "DOUBLE YELLOW", 0xF1C40F}
-
-  defp highlight_spec(:red, _msg), do: {:flag_red, "🟥", "RED FLAG", 0xE74C3C}
-  defp highlight_spec(:chequered, _msg), do: {:flag_chequered, "🏁", "CHEQUERED FLAG", 0xFFFFFF}
-
-  defp highlight_spec(:"black and white", _msg),
-    do: {:flag_black_white, "🏴", "BLACK AND WHITE FLAG", 0x95A5A6}
-
-  defp highlight_spec(:"black and orange", _msg),
-    do: {:flag_black_orange, "🟠", "BLACK AND ORANGE FLAG", 0xE67E22}
-
-  # Safety car / VSC arrive without a Flag field; detect them from the message.
-  defp highlight_spec(_flag, msg) when is_binary(msg) do
+  # Returns {emoji, label, colour} for messages worth highlighting as an embed,
+  # or nil to keep the message as plain text. Covers flags, safety cars and
+  # stewards/investigation decisions.
+  defp highlight(flag, message, source) do
     cond do
-      msg =~ ~r/virtual safety car/iu -> {:vsc, "🟡", "VIRTUAL SAFETY CAR", 0xF39C12}
-      msg =~ ~r/safety car/iu -> {:safety_car, "🚗", "SAFETY CAR", 0xE67E22}
-      true -> nil
+      flag == :green -> {resolve_emoji(:flag_green, "🟢"), "GREEN FLAG", 0x2ECC71}
+      flag == :yellow -> {resolve_emoji(:flag_yellow, "🟡"), "YELLOW FLAG", 0xF1C40F}
+      flag == :"double yellow" -> {resolve_emoji(:flag_yellow_red, "🟡"), "DOUBLE YELLOW", 0xF1C40F}
+      flag == :red -> {resolve_emoji(:flag_red, "🟥"), "RED FLAG", 0xE74C3C}
+      flag == :chequered -> {resolve_emoji(:flag_chequered, "🏁"), "CHEQUERED FLAG", 0xFFFFFF}
+      flag == :"black and white" -> {resolve_emoji(:flag_black_white, "🏴"), "BLACK AND WHITE FLAG", 0x95A5A6}
+      flag == :"black and orange" -> {resolve_emoji(:flag_black_orange, "🟠"), "BLACK AND ORANGE FLAG", 0xE67E22}
+      matches?(message, ~r/virtual safety car/iu) -> {resolve_emoji(:vsc, "🟡"), "VIRTUAL SAFETY CAR", 0xF39C12}
+      matches?(message, ~r/safety car/iu) -> {resolve_emoji(:safety_car, "🚗"), "SAFETY CAR", 0xE67E22}
+      true -> stewards_highlight(message, source)
     end
   end
 
-  defp highlight_spec(_flag, _msg), do: nil
+  # Stewards / investigation lifecycle: noted -> under investigation ->
+  # no further action / penalty.
+  defp stewards_highlight(message, source) do
+    cond do
+      matches?(message, ~r/no further (action|investigation)/iu) ->
+        {"✅", "NO FURTHER ACTION", 0x2ECC71}
+
+      matches?(message, ~r/penalty|reprimand/iu) ->
+        {"⏱️", "PENALTY", 0xE74C3C}
+
+      matches?(message, ~r/under investigation|will be investigated/iu) ->
+        {"🔍", "UNDER INVESTIGATION", 0xF39C12}
+
+      matches?(message, ~r/\bnoted\b/iu) ->
+        {"📝", "NOTED", 0xF1C40F}
+
+      source in [:stewards, :stewards_correction] ->
+        {"⚖️", "STEWARDS", 0x9B59B6}
+
+      true ->
+        nil
+    end
+  end
+
+  defp matches?(message, regex), do: is_binary(message) and message =~ regex
+
+  defp resolve_emoji(key, fallback), do: F1Bot.ExternalApi.Discord.get_emoji_or_default(key, fallback)
 
   defp source_prefix(:stewards), do: "FIA Stewards: "
   defp source_prefix(:stewards_correction), do: "FIA Stewards correction: "
