@@ -27,7 +27,10 @@ defmodule F1Bot.Application do
         F1Bot.TranscriberService,
         F1Bot.ExternalApi.F1DB,
         F1Bot.ExternalApi.F1Calendar,
-        F1Bot.SessionAlerts
+        F1Bot.SessionAlerts,
+        # Restores session state on boot (disk first, network fallback) and
+        # periodically persists it; inert when no snapshot path is configured.
+        F1Bot.SessionPersistence
       ]
       |> add_if_feature_flag_enabled(:connect_to_signalr, {
         F1Bot.ExternalApi.SignalRCore.Client,
@@ -45,10 +48,6 @@ defmodule F1Bot.Application do
         ]
       })
       |> add_if_feature_flag_enabled(:start_discord, F1Bot.ExternalApi.Discord.Commands)
-      |> add_if_feature_flag_enabled(:auto_reload_session, {
-        Task,
-        fn -> F1Bot.reload_session(true) end
-      })
       |> add_if_demo_mode_enabled(F1Bot.Demo.Supervisor)
 
     # See https://hexdocs.pm/elixir/Supervisor.html
