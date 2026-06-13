@@ -33,12 +33,123 @@ defmodule F1Bot.F1Session do
     field(:lap_counter, LapCounter.t(), default: LapCounter.new())
     field(:event_generator, F1Session.EventGenerator.t(), default: F1Session.EventGenerator.new())
     field(:weather, map(), default: %{})
+    # Live running order per driver: %{driver_number => %{position, gap_to_leader, interval, in_pit, retired}}
+    field(:live_timing, map(), default: %{})
   end
 
   def new(), do: %__MODULE__{}
 
   def driver_list(session) do
     DriverCache.driver_list(session.driver_cache)
+  end
+
+  @doc """
+  Current live running order built from the `TimingData` feed, joined with driver
+  names and current tyre. Returns drivers sorted by position, or `{:error, :no_data}`
+  when there is no live timing (no active session yet).
+  """
+  def live_standings(session) do
+    fastest_num = fastest_lap_driver(session)
+
+    entries =
+      session.live_timing
+      |> Enum.map(fn {num, lt} ->
+        {compound, tyre_age} = current_tyre(session, num)
+
+        %{
+          position: lt[:position],
+          driver_number: num,
+          name: driver_short_name(session, num),
+          abbr: driver_abbr_or_num(session, num),
+          gap_to_leader: lt[:gap_to_leader],
+          interval: lt[:interval],
+          in_pit: lt[:in_pit] == true,
+          retired: lt[:retired] == true,
+          tyre: compound,
+          tyre_age: tyre_age,
+          fastest_lap: num == fastest_num
+        }
+      end)
+      |> Enum.filter(&(&1.position != nil))
+      |> Enum.sort_by(& &1.position)
+
+    case entries do
+      [] ->
+        {:error, :no_data}
+
+      _ ->
+        {:ok,
+         %{
+           standings: entries,
+           gp_name: session.session_info.gp_name,
+           session_type: session.session_info.type,
+           lap_current: session.lap_counter.current,
+           lap_total: session.lap_counter.total,
+           live: session.session_status == :started
+         }}
+    end
+  end
+
+  # Driver number holding the session's fastest lap, or nil.
+  defp fastest_lap_driver(session) do
+    best = session.driver_data_repo.best_stats
+
+    case best.fastest_lap_ms do
+      nil ->
+        nil
+
+      ms ->
+        Enum.find_value(best.personal_best, nil, fn {num, pb} ->
+          if pb.lap_time_ms == ms, do: num, else: nil
+        end)
+    end
+  end
+
+  defp merge_live_timing(session, td = %TimingData{}) do
+    changed =
+      %{
+        position: td.position,
+        gap_to_leader: td.gap_to_leader,
+        interval: td.interval,
+        in_pit: td.in_pit,
+        retired: td.retired
+      }
+      |> Enum.reject(fn {_k, v} -> v == nil end)
+      |> Map.new()
+
+    if changed == %{} do
+      session
+    else
+      existing = Map.get(session.live_timing, td.driver_number, %{})
+      merged = Map.merge(existing, changed)
+      %{session | live_timing: Map.put(session.live_timing, td.driver_number, merged)}
+    end
+  end
+
+  defp driver_short_name(session, num) do
+    case DriverCache.get_driver_by_number(session.driver_cache, num) do
+      {:ok, d} -> d.last_name || d.full_name || d.driver_abbr || "##{num}"
+      _ -> "##{num}"
+    end
+  end
+
+  defp driver_abbr_or_num(session, num) do
+    case DriverCache.get_driver_by_number(session.driver_cache, num) do
+      {:ok, d} -> d.driver_abbr || d.last_name || "##{num}"
+      _ -> "##{num}"
+    end
+  end
+
+  # {compound, tyre_age_in_laps} for the driver's current stint, or {nil, nil}.
+  # `total_laps` (cumulative laps on the set) is preferred; `age` (laps when fitted)
+  # is the fallback before the feed reports totals.
+  defp current_tyre(session, num) do
+    with {:ok, dd} <- DriverDataRepo.fetch(session.driver_data_repo, num),
+         {:ok, stint} <- DriverDataRepo.Stints.last_stint(dd.stints) do
+      {stint.compound, stint.total_laps || stint.age}
+    else
+      _ -> {nil, nil}
+    end
   end
 
   def driver_summary(session, driver_number) when is_integer(driver_number) do
@@ -81,7 +192,9 @@ defmodule F1Bot.F1Session do
         timing_data
       )
 
-    session = %{session | driver_data_repo: repo}
+    session =
+      %{session | driver_data_repo: repo}
+      |> merge_live_timing(timing_data)
 
     events =
       events

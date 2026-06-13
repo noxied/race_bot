@@ -104,6 +104,14 @@ defmodule F1Bot do
   end
 
   @doc """
+  Returns the current live running order (positions, gaps, tyre) from the live
+  timing feed, or `{:error, :no_data}` when no session is active.
+  """
+  def live_standings() do
+    F1Bot.F1Session.Server.live_standings()
+  end
+
+  @doc """
   Returns a copy of the current `F1Session` session state for analysis.
 
   `light_copy` controls whether "heavy" data, such as position and car telemetry data
@@ -260,22 +268,6 @@ defmodule F1Bot do
   """
   def fast_forward_replay(seconds) do
     Replay.Server.fast_forward(seconds)
-  end
-
-  @doc """
-  Returns the current lap number.
-  """
-  def lap_number() do
-    case session_info() do
-      {:ok, info} ->
-        case info.lap_number do
-          nil -> {:error, :no_laps}
-          x -> {:ok, x}
-        end
-
-      {:error, err} ->
-        {:error, err}
-    end
   end
 
   @doc """

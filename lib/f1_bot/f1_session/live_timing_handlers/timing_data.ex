@@ -25,6 +25,12 @@ defmodule F1Bot.F1Session.LiveTimingHandlers.TimingData do
     field(:lap_number, pos_integer() | nil)
     field(:lap_time, Timex.Duration.t() | nil)
     field(:sector_times, sector_times() | nil)
+    # Live running order (deltas are partial, merged into session state downstream)
+    field(:position, pos_integer() | nil)
+    field(:gap_to_leader, String.t() | nil)
+    field(:interval, String.t() | nil)
+    field(:in_pit, boolean() | nil)
+    field(:retired, boolean() | nil)
   end
 
   @behaviour LiveTimingHandlers
@@ -89,7 +95,12 @@ defmodule F1Bot.F1Session.LiveTimingHandlers.TimingData do
       timestamp: timestamp,
       lap_number: lap_number,
       lap_time: lap_time,
-      sector_times: sector_times
+      sector_times: sector_times,
+      position: parse_position(data["Position"]),
+      gap_to_leader: blank_to_nil(data["GapToLeader"]),
+      interval: blank_to_nil(get_in(data, ["IntervalToPositionAhead", "Value"])),
+      in_pit: data["InPit"],
+      retired: data["Retired"]
     }
 
     {session, new_events} =
@@ -148,4 +159,24 @@ defmodule F1Bot.F1Session.LiveTimingHandlers.TimingData do
   end
 
   def maybe_extract_sectors(_sectors), do: nil
+
+  defp parse_position(p) when is_integer(p) and p > 0, do: p
+
+  defp parse_position(p) when is_binary(p) do
+    case Integer.parse(p) do
+      {n, _} when n > 0 -> n
+      _ -> nil
+    end
+  end
+
+  defp parse_position(_), do: nil
+
+  defp blank_to_nil(s) when is_binary(s) do
+    case String.trim(s) do
+      "" -> nil
+      other -> other
+    end
+  end
+
+  defp blank_to_nil(_), do: nil
 end

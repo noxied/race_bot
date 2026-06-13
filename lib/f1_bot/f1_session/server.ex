@@ -76,6 +76,11 @@ defmodule F1Bot.F1Session.Server do
     |> GenServer.call({:weather})
   end
 
+  def live_standings() do
+    server_via()
+    |> GenServer.call({:live_standings})
+  end
+
   def driver_summary(driver_no) do
     server_via()
     |> GenServer.call({:driver_summary, driver_no})
@@ -205,6 +210,12 @@ defmodule F1Bot.F1Session.Server do
         do: {:error, :no_data},
         else: {:ok, session.weather}
 
+    {:reply, reply, state}
+  end
+
+  @impl true
+  def handle_call({:live_standings}, _from, state = %{session: session}) do
+    reply = F1Session.live_standings(session)
     {:reply, reply, state}
   end
 

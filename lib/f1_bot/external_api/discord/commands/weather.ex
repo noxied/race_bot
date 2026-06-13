@@ -17,7 +17,7 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Weather do
     response =
       case F1Bot.weather() do
         {:ok, weather} when map_size(weather) > 0 ->
-          Response.make_embed_message(flags, [build_embed(weather, locale)])
+          Response.make_embed_message(flags, [build_embed(weather, locale, live?())])
 
         _ ->
           Response.make_message(flags, I18n.t(:weather_none, locale))
@@ -26,7 +26,11 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Weather do
     Response.send_interaction_response(response, interaction)
   end
 
-  defp build_embed(w, locale) do
+  defp live?, do: match?({:ok, :started}, F1Bot.session_status())
+
+  defp build_embed(w, locale, live) do
+    footer = if live, do: :weather_footer, else: :weather_footer_stale
+
     %{
       type: "rich",
       color: @color,
@@ -39,7 +43,7 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Weather do
         field(I18n.t(:weather_pressure, locale), pressure(w[:pressure])),
         field(I18n.t(:weather_rain, locale), rain(w[:rainfall], locale))
       ],
-      footer: %{text: I18n.t(:weather_footer, locale)}
+      footer: %{text: I18n.t(footer, locale)}
     }
   end
 

@@ -231,6 +231,14 @@ defmodule F1Bot.ExternalApi.Discord.I18n do
       de: "F1-Informationen in Echtzeit",
       es: "Información F1 en tiempo real"
     },
+    weather_footer_stale: %{
+      en: "Last readings (session not live)",
+      pt: "Últimas leituras (sessão não está ao vivo)",
+      fr: "Dernières mesures (séance hors ligne)",
+      it: "Ultime rilevazioni (sessione non in diretta)",
+      de: "Letzte Messwerte (Session nicht live)",
+      es: "Últimas lecturas (sesión no en directo)"
+    },
     weather_none: %{
       en: "No live weather right now (no active session).",
       pt: "Sem meteorologia ao vivo de momento (não há sessão ativa).",
@@ -239,13 +247,46 @@ defmodule F1Bot.ExternalApi.Discord.I18n do
       de: "Derzeit kein Live-Wetter (keine aktive Session).",
       es: "No hay tiempo en directo ahora mismo (sin sesión activa)."
     },
-    weather_unavailable: %{
-      en: "Weather service is unavailable right now, try again shortly.",
-      pt: "O serviço de meteorologia está indisponível de momento, tenta daqui a pouco.",
-      fr: "Le service météo est indisponible pour le moment, réessaie bientôt.",
-      it: "Il servizio meteo non è disponibile al momento, riprova tra poco.",
-      de: "Der Wetterdienst ist gerade nicht verfügbar, versuche es gleich erneut.",
-      es: "El servicio meteorológico no está disponible ahora mismo, inténtalo en breve."
+    # ---- /positions ----
+    positions_cmd_desc: %{
+      en: "Show the live running order (during a session)",
+      pt: "Mostra a classificação ao vivo da sessão (durante uma sessão)",
+      fr: "Affiche le classement en direct (pendant une séance)",
+      it: "Mostra l'ordine in pista in diretta (durante una sessione)",
+      de: "Zeigt die Live-Reihenfolge (während einer Session)",
+      es: "Muestra la clasificación en directo (durante una sesión)"
+    },
+    positions_title: %{
+      en: "Live Timing",
+      pt: "Classificação Ao Vivo",
+      fr: "Classement en Direct",
+      it: "Tempi in Diretta",
+      de: "Live-Wertung",
+      es: "Clasificación en Directo"
+    },
+    positions_none: %{
+      en: "No live timing right now (no active session).",
+      pt: "Sem classificação ao vivo de momento (não há sessão ativa).",
+      fr: "Pas de classement en direct pour le moment (aucune séance active).",
+      it: "Nessun tempo in diretta al momento (nessuna sessione attiva).",
+      de: "Derzeit keine Live-Wertung (keine aktive Session).",
+      es: "No hay clasificación en directo ahora mismo (sin sesión activa)."
+    },
+    positions_footer_live: %{
+      en: "Live timing, updates in real time",
+      pt: "Classificação ao vivo, atualiza em tempo real",
+      fr: "Classement en direct, mis à jour en temps réel",
+      it: "Tempi in diretta, aggiornati in tempo reale",
+      de: "Live-Wertung, aktualisiert in Echtzeit",
+      es: "Clasificación en directo, se actualiza en tiempo real"
+    },
+    positions_footer_stale: %{
+      en: "Last known order (session not live)",
+      pt: "Última ordem conhecida (sessão não está ao vivo)",
+      fr: "Dernier ordre connu (séance hors ligne)",
+      it: "Ultimo ordine noto (sessione non in diretta)",
+      de: "Letzte bekannte Reihenfolge (Session nicht live)",
+      es: "Último orden conocido (sesión no en directo)"
     },
     ping_cmd_desc: %{
       en: "Check the bot's latency",
