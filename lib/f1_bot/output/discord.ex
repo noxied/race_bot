@@ -250,6 +250,8 @@ defmodule F1Bot.Output.Discord do
         },
         state
       ) do
+    message = strip_trailing_time(message)
+
     case highlight(flag, message, source) do
       {emoji, label, color} ->
         embed = %{
@@ -318,6 +320,16 @@ defmodule F1Bot.Output.Discord do
   end
 
   defp matches?(message, regex), do: is_binary(message) and message =~ regex
+
+  # F1 appends its own HH:MM:SS timestamp to race control messages; drop it
+  # since Discord already shows the message time.
+  defp strip_trailing_time(nil), do: nil
+
+  defp strip_trailing_time(message) do
+    message
+    |> String.replace(~r/\s*\(?\b\d{1,2}:\d{2}:\d{2}\b\)?/, "")
+    |> String.trim()
+  end
 
   defp resolve_emoji(key, fallback), do: F1Bot.ExternalApi.Discord.get_emoji_or_default(key, fallback)
 

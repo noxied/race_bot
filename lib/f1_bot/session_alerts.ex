@@ -66,7 +66,7 @@ defmodule F1Bot.SessionAlerts do
 
   defp post_alert(session) do
     unix = DateTime.to_unix(session.start)
-    msg = "⏰ **#{label(session.kind)}** - #{session.gp_name} starts <t:#{unix}:R> (<t:#{unix}:t>)"
+    msg = "⏰ **#{label(session.kind)}** (#{session.gp_name}) <t:#{unix}:R> · <t:#{unix}:t>"
     Discord.post_message(msg)
   end
 
