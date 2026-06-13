@@ -59,7 +59,7 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Positions do
   defp col_driver(standings) do
     Enum.map_join(standings, "\n", fn e ->
       pos = e.position |> to_string() |> String.pad_leading(2)
-      "`P#{pos}` `#{e.abbr}`#{driver_marker(e)}"
+      "`P#{pos}` `#{e.name}`#{driver_marker(e)}"
     end)
   end
 

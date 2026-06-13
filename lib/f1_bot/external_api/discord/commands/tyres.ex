@@ -40,7 +40,7 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Tyres do
 
   defp line(e) do
     pos = e.position |> to_string() |> String.pad_leading(2)
-    "`P#{pos}` `#{e.abbr}` #{sequence(e)}"
+    "`P#{pos}` `#{e.name}` #{sequence(e)}"
   end
 
   defp sequence(%{tyres: []}), do: "`-`"

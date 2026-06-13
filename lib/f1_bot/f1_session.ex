@@ -59,6 +59,7 @@ defmodule F1Bot.F1Session do
         %{
           position: lt[:position],
           driver_number: num,
+          name: driver_name(session, num),
           abbr: driver_abbr_or_num(session, num),
           gap_to_leader: lt[:gap_to_leader],
           interval: lt[:interval],
@@ -130,6 +131,13 @@ defmodule F1Bot.F1Session do
   defp driver_abbr_or_num(session, num) do
     case DriverCache.get_driver_by_number(session.driver_cache, num) do
       {:ok, d} -> d.driver_abbr || d.last_name || "##{num}"
+      _ -> "##{num}"
+    end
+  end
+
+  defp driver_name(session, num) do
+    case DriverCache.get_driver_by_number(session.driver_cache, num) do
+      {:ok, d} -> d.last_name || d.full_name || d.driver_abbr || "##{num}"
       _ -> "##{num}"
     end
   end
