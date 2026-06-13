@@ -1,8 +1,8 @@
 defmodule F1Bot.ExternalApi.Discord.Commands.Positions do
   @moduledoc """
   Slash command `/positions` - the live running order of the current session
-  from the F1 live timing feed, rendered as three columns: position/driver,
-  best lap (or gap to leader during a race), and tyre history with current age.
+  from the F1 live timing feed, rendered as two columns: position/driver and
+  best lap (or gap to leader during a race). Tyre history lives in `/tyres`.
   Available while a session is live.
   """
   alias Nostrum.Struct.Interaction
@@ -46,8 +46,7 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Positions do
 
     [
       %{name: I18n.t(:positions_col_driver, locale), value: col_driver(s), inline: true},
-      second_field(data, locale),
-      %{name: I18n.t(:positions_col_tyres, locale), value: col_tyres(s), inline: true}
+      second_field(data, locale)
     ]
   end
 
@@ -88,37 +87,6 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Positions do
     end
   end
 
-  # Past stints as compact letters, current stint as the custom emoji + age.
-  # Custom emoji codes are ~27 chars each, so only the current tyre uses one to
-  # stay within Discord's 1024-char field limit across the full grid.
-  defp col_tyres(standings) do
-    Enum.map_join(standings, "\n", &tyre_cell/1)
-  end
-
-  defp tyre_cell(%{tyres: []}), do: "`-`"
-
-  defp tyre_cell(e) do
-    {past, [current]} = Enum.split(e.tyres, length(e.tyres) - 1)
-
-    prefix =
-      case Enum.map_join(past, " ", &tyre_letter/1) do
-        "" -> ""
-        letters -> "`#{letters}` "
-      end
-
-    "#{prefix}#{tyre_emoji(current)}#{tyre_age(e.tyre_age)}"
-  end
-
-  defp tyre_age(age) when is_integer(age), do: " `#{age}`"
-  defp tyre_age(_), do: ""
-
-  defp tyre_letter(:soft), do: "S"
-  defp tyre_letter(:medium), do: "M"
-  defp tyre_letter(:hard), do: "H"
-  defp tyre_letter(:intermediate), do: "I"
-  defp tyre_letter(:wet), do: "W"
-  defp tyre_letter(_), do: "?"
-
   # ---- helpers -----------------------------------------------------------
 
   defp title(data, locale) do
@@ -149,20 +117,4 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Positions do
 
   defp fastest_emoji,
     do: F1Bot.ExternalApi.Discord.get_emoji_or_default(:fastest_lap, "🟣")
-
-  defp tyre_emoji(nil), do: "⬤"
-
-  defp tyre_emoji(compound) do
-    default =
-      case compound do
-        :soft -> "🔴"
-        :medium -> "🟡"
-        :hard -> "⚪"
-        :intermediate -> "🟢"
-        :wet -> "🔵"
-        _ -> "⬤"
-      end
-
-    F1Bot.ExternalApi.Discord.get_emoji_or_default(:"#{compound}_tyre", default)
-  end
 end

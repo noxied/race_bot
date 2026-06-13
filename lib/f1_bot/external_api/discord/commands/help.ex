@@ -14,6 +14,7 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Help do
     {"/calendar", :calendar_cmd_desc},
     {"/weather", :weather_cmd_desc},
     {"/positions", :positions_cmd_desc},
+    {"/tyres", :tyres_cmd_desc},
     {"/drivers", :drivers_cmd_desc},
     {"/teams", :teams_cmd_desc},
     {"/ping", :ping_cmd_desc},

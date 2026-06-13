@@ -296,13 +296,29 @@ defmodule F1Bot.ExternalApi.Discord.I18n do
       de: "Abstand",
       es: "Intervalo"
     },
-    positions_col_tyres: %{
-      en: "Tyres",
-      pt: "Pneus",
-      fr: "Pneus",
-      it: "Gomme",
-      de: "Reifen",
-      es: "Neumáticos"
+    tyres_cmd_desc: %{
+      en: "Show each driver's tyre set history (during a session)",
+      pt: "Mostra o histórico de sets de pneus de cada piloto (durante uma sessão)",
+      fr: "Affiche l'historique des trains de pneus de chaque pilote (pendant une séance)",
+      it: "Mostra lo storico dei set di gomme di ogni pilota (durante una sessione)",
+      de: "Zeigt den Reifensatz-Verlauf jedes Fahrers (während einer Session)",
+      es: "Muestra el historial de juegos de neumáticos de cada piloto (durante una sesión)"
+    },
+    tyres_title: %{
+      en: "Tyre Sets",
+      pt: "Sets de Pneus",
+      fr: "Trains de Pneus",
+      it: "Set di Gomme",
+      de: "Reifensätze",
+      es: "Juegos de Neumáticos"
+    },
+    tyres_none: %{
+      en: "No live timing right now (no active session).",
+      pt: "Sem dados ao vivo de momento (não há sessão ativa).",
+      fr: "Pas de données en direct pour le moment (aucune séance active).",
+      it: "Nessun dato in diretta al momento (nessuna sessione attiva).",
+      de: "Derzeit keine Live-Daten (keine aktive Session).",
+      es: "No hay datos en directo ahora mismo (sin sesión activa)."
     },
     positions_footer_live: %{
       en: "Live timing, updates in real time",
