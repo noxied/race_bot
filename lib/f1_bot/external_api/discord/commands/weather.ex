@@ -32,21 +32,23 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Weather do
         |> Response.make_followup_message(I18n.t(:weather_none, locale))
         |> Response.send_followup_response(interaction)
 
-      {:error, _reason} ->
+      {:error, reason} ->
+        Logger.warning("/weather: OpenF1 request failed: #{inspect(reason)}")
+
         flags
-        |> Response.make_followup_message(I18n.t(:data_not_ready, locale))
+        |> Response.make_followup_message(I18n.t(:weather_unavailable, locale))
         |> Response.send_followup_response(interaction)
     end
   end
 
   defp fetch_latest do
     case Finch.build(:get, @url, [{"user-agent", "f1bot"}])
-         |> Finch.request(@finch, receive_timeout: 8_000) do
+         |> Finch.request(@finch, receive_timeout: 12_000) do
       {:ok, %{status: 200, body: body}} ->
         case Jason.decode(body) do
           {:ok, [_ | _] = list} -> {:ok, List.last(list)}
           {:ok, _} -> {:error, :no_data}
-          {:error, reason} -> {:error, reason}
+          {:error, reason} -> {:error, {:json, reason}}
         end
 
       {:ok, %{status: status}} ->

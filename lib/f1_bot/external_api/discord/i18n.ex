@@ -239,6 +239,14 @@ defmodule F1Bot.ExternalApi.Discord.I18n do
       de: "Derzeit kein Live-Wetter (keine aktive Session).",
       es: "No hay tiempo en directo ahora mismo (sin sesión activa)."
     },
+    weather_unavailable: %{
+      en: "Weather service is unavailable right now, try again shortly.",
+      pt: "O serviço de meteorologia está indisponível de momento, tenta daqui a pouco.",
+      fr: "Le service météo est indisponible pour le moment, réessaie bientôt.",
+      it: "Il servizio meteo non è disponibile al momento, riprova tra poco.",
+      de: "Der Wetterdienst ist gerade nicht verfügbar, versuche es gleich erneut.",
+      es: "El servicio meteorológico no está disponible ahora mismo, inténtalo en breve."
+    },
     ping_cmd_desc: %{
       en: "Check the bot's latency",
       pt: "Verifica a latência do bot",

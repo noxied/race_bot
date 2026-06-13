@@ -18,7 +18,8 @@ defmodule F1Bot.F1Session.LiveTimingHandlers.SessionStatus do
         session,
         %Packet{
           topic: @scope,
-          data: %{"Status" => status}
+          data: %{"Status" => status},
+          init: init
         },
         _options
       ) do
@@ -29,6 +30,12 @@ defmodule F1Bot.F1Session.LiveTimingHandlers.SessionStatus do
       |> String.to_atom()
 
     {session, events} = F1Session.push_session_status(session, status)
+
+    # On (re)connect the snapshot replays the current status as an init packet.
+    # Don't emit notifications for it, otherwise the bot announces a session
+    # "just started" (and mislabels the qualifying segment) when it merely
+    # joined an in-progress session.
+    events = if init, do: [], else: events
 
     result = %ProcessingResult{
       session: session,
