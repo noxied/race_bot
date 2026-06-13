@@ -290,6 +290,7 @@ defmodule F1Bot.Output.Discord do
       flag == :"black and white" -> {resolve_emoji(:flag_black_white, "🏴"), "BLACK AND WHITE FLAG", 0x95A5A6}
       flag == :"black and orange" -> {resolve_emoji(:flag_black_orange, "🟠"), "BLACK AND ORANGE FLAG", 0xE67E22}
       matches?(message, ~r/virtual safety car/iu) -> {resolve_emoji(:vsc, "🟡"), "VIRTUAL SAFETY CAR", 0xF39C12}
+      matches?(message, ~r/medical car/iu) -> {"🚑", "MEDICAL CAR", 0xC0392B}
       matches?(message, ~r/safety car/iu) -> {resolve_emoji(:safety_car, "🚗"), "SAFETY CAR", 0xE67E22}
       true -> stewards_highlight(message, source)
     end
