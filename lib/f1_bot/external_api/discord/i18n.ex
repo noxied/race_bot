@@ -272,6 +272,38 @@ defmodule F1Bot.ExternalApi.Discord.I18n do
       de: "Derzeit keine Live-Wertung (keine aktive Session).",
       es: "No hay clasificación en directo ahora mismo (sin sesión activa)."
     },
+    positions_col_driver: %{
+      en: "Pos / Driver",
+      pt: "Pos / Piloto",
+      fr: "Pos / Pilote",
+      it: "Pos / Pilota",
+      de: "Pos / Fahrer",
+      es: "Pos / Piloto"
+    },
+    positions_col_bestlap: %{
+      en: "Best Lap",
+      pt: "Melhor Volta",
+      fr: "Meilleur Tour",
+      it: "Giro Veloce",
+      de: "Schnellste Runde",
+      es: "Mejor Vuelta"
+    },
+    positions_col_gap: %{
+      en: "Gap",
+      pt: "Intervalo",
+      fr: "Écart",
+      it: "Distacco",
+      de: "Abstand",
+      es: "Intervalo"
+    },
+    positions_col_tyres: %{
+      en: "Tyres",
+      pt: "Pneus",
+      fr: "Pneus",
+      it: "Gomme",
+      de: "Reifen",
+      es: "Neumáticos"
+    },
     positions_footer_live: %{
       en: "Live timing, updates in real time",
       pt: "Classificação ao vivo, atualiza em tempo real",

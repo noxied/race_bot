@@ -54,18 +54,18 @@ defmodule F1Bot.F1Session do
     entries =
       session.live_timing
       |> Enum.map(fn {num, lt} ->
-        {compound, tyre_age} = current_tyre(session, num)
+        {compounds, tyre_age} = tyre_info(session, num)
 
         %{
           position: lt[:position],
           driver_number: num,
-          name: driver_short_name(session, num),
           abbr: driver_abbr_or_num(session, num),
           gap_to_leader: lt[:gap_to_leader],
           interval: lt[:interval],
           in_pit: lt[:in_pit] == true,
           retired: lt[:retired] == true,
-          tyre: compound,
+          best_lap_ms: driver_best_lap_ms(session, num),
+          tyres: compounds,
           tyre_age: tyre_age,
           fastest_lap: num == fastest_num
         }
@@ -83,6 +83,7 @@ defmodule F1Bot.F1Session do
            standings: entries,
            gp_name: session.session_info.gp_name,
            session_type: session.session_info.type,
+           race: session.session_info.type == "Race",
            lap_current: session.lap_counter.current,
            lap_total: session.lap_counter.total,
            live: session.session_status == :started
@@ -126,13 +127,6 @@ defmodule F1Bot.F1Session do
     end
   end
 
-  defp driver_short_name(session, num) do
-    case DriverCache.get_driver_by_number(session.driver_cache, num) do
-      {:ok, d} -> d.last_name || d.full_name || d.driver_abbr || "##{num}"
-      _ -> "##{num}"
-    end
-  end
-
   defp driver_abbr_or_num(session, num) do
     case DriverCache.get_driver_by_number(session.driver_cache, num) do
       {:ok, d} -> d.driver_abbr || d.last_name || "##{num}"
@@ -140,15 +134,32 @@ defmodule F1Bot.F1Session do
     end
   end
 
-  # {compound, tyre_age_in_laps} for the driver's current stint, or {nil, nil}.
-  # `total_laps` (cumulative laps on the set) is preferred; `age` (laps when fitted)
-  # is the fallback before the feed reports totals.
-  defp current_tyre(session, num) do
-    with {:ok, dd} <- DriverDataRepo.fetch(session.driver_data_repo, num),
-         {:ok, stint} <- DriverDataRepo.Stints.last_stint(dd.stints) do
-      {stint.compound, stint.total_laps || stint.age}
-    else
-      _ -> {nil, nil}
+  # {[compound], current_tyre_age_in_laps} for the driver. Compounds are the stint
+  # history in chronological order; the age is for the current (last) stint, using
+  # `total_laps` (cumulative laps on the set) with `age` (laps when fitted) as fallback.
+  defp tyre_info(session, num) do
+    case DriverDataRepo.fetch(session.driver_data_repo, num) do
+      {:ok, dd} ->
+        stints = Enum.sort_by(dd.stints.data, & &1.number, :asc)
+        compounds = Enum.map(stints, & &1.compound)
+
+        current_age =
+          case List.last(stints) do
+            nil -> nil
+            s -> s.total_laps || s.age
+          end
+
+        {compounds, current_age}
+
+      _ ->
+        {[], nil}
+    end
+  end
+
+  defp driver_best_lap_ms(session, num) do
+    case session.driver_data_repo.best_stats.personal_best[num] do
+      %{lap_time_ms: ms} -> ms
+      _ -> nil
     end
   end
 
