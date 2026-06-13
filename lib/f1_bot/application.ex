@@ -30,7 +30,7 @@ defmodule F1Bot.Application do
         F1Bot.SessionAlerts
       ]
       |> add_if_feature_flag_enabled(:connect_to_signalr, {
-        F1Bot.ExternalApi.SignalR.Client,
+        F1Bot.ExternalApi.SignalRCore.Client,
         [
           scheme: "https",
           hostname: "livetiming.formula1.com",

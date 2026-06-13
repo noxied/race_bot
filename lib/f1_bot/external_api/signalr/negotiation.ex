@@ -2,21 +2,24 @@ defmodule F1Bot.ExternalApi.SignalR.Negotiation do
   @moduledoc """
   HTTP client for SignalR connection negotiation.
 
-  F1 migrated the live timing feed from classic ASP.NET SignalR
-  (`/signalr`, `clientProtocol=1.x`, GET negotiate) to ASP.NET Core SignalR
-  (`/signalrcore`, `negotiateVersion=1`, POST negotiate). The old endpoint now
-  returns HTTP 401. This module implements the Core negotiation.
-
-  Core negotiate protocol:
-  https://github.com/dotnet/aspnetcore/blob/main/src/SignalR/docs/specs/TransportProtocols.md
+  Useful documentation for SignalR 1.2:
+  https://blog.3d-logic.com/2015/03/29/signalr-on-the-wire-an-informal-description-of-the-signalr-protocol/
   """
   @finch_instance F1Bot.Finch
 
   require Logger
 
   def negotiate(opts) do
+    connection_data =
+      opts
+      |> Keyword.fetch!(:conn_data)
+      |> Jason.encode!()
+
     query =
-      %{negotiateVersion: "1"}
+      %{
+        clientProtocol: "1.2",
+        connectionData: connection_data
+      }
       |> URI.encode_query()
 
     base_path = Keyword.fetch!(opts, :base_path)
@@ -31,56 +34,40 @@ defmodule F1Bot.ExternalApi.SignalR.Negotiation do
       }
       |> URI.to_string()
 
-    Logger.info("Negotiating SignalR (core) at '#{url}'")
+    Logger.info("Negotiating SignalR at '#{url}'")
 
     headers = [
       {"user-agent", Keyword.fetch!(opts, :user_agent)}
     ]
 
-    # SignalR Core negotiate is a POST with an empty body.
-    Finch.build(:post, url, headers, "")
-    |> Finch.request(@finch_instance, receive_timeout: 5000)
+    Finch.build(:get, url, headers)
+    |> Finch.request(@finch_instance, receive_timeout: 2000)
     |> parse_response()
   end
 
   defp parse_response({:ok, %{status: 200, body: body, headers: headers}}) do
-    # F1's load balancer pins the websocket to the same node via the AWSALB
-    # cookie returned here, so we must forward it on the websocket upgrade.
     cookies =
       headers
-      |> Enum.filter(fn {name, _v} -> String.downcase(name) == "set-cookie" end)
+      |> Enum.filter(fn {name, _v} -> name == "set-cookie" end)
       |> Enum.map(fn {_name, val} -> val end)
       |> Enum.map(fn val -> String.split(val, ";") end)
       |> Enum.map(fn [val | _] -> val end)
-      |> Enum.map(fn val -> String.split(val, "=", parts: 2) end)
+      |> Enum.map(fn val -> String.split(val, "=") end)
       |> Enum.map(fn [name, value] -> {name, value} end)
       |> Enum.into(%{})
 
     parsed = Jason.decode!(body)
 
-    # Core negotiate (version 1) returns `connectionToken` which must be used as
-    # the `id` query param on the websocket, plus a `connectionId`.
-    conn_token = Map.fetch!(parsed, "connectionToken")
-    conn_id = Map.get(parsed, "connectionId", conn_token)
+    %{
+      "TryWebSockets" => true,
+      "ProtocolVersion" => "1.2"
+    } = parsed
 
     response = %{
-      data: %{
-        "ConnectionId" => conn_id,
-        "ConnectionToken" => conn_token
-      },
+      data: parsed,
       cookies: cookies
     }
 
     {:ok, response}
-  end
-
-  defp parse_response({:ok, %{status: status, body: body}}) do
-    Logger.error("SignalR negotiate failed: HTTP #{status} #{inspect(body)}")
-    {:error, {:negotiate_http_error, status}}
-  end
-
-  defp parse_response({:error, reason}) do
-    Logger.error("SignalR negotiate request error: #{inspect(reason)}")
-    {:error, reason}
   end
 end
