@@ -108,8 +108,12 @@ defmodule F1Bot.SessionPersistence do
     struct(F1Session.new(), Map.from_struct(session))
   end
 
+  # Force the reload so it works even on a race weekend, when F1's streaming
+  # status reads "not offline" between sessions. Forcing only bypasses that
+  # check; it still requires a completed session archive to exist, so it never
+  # overwrites a session that is genuinely in progress.
   defp network_reload do
-    case F1Bot.reload_session(true) do
+    case F1Bot.reload_session(true, true) do
       {:error, reason} -> Logger.info("Network session reload skipped: #{inspect(reason)}")
       _ -> :ok
     end
