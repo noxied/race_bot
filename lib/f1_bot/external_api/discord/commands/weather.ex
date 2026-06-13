@@ -1,62 +1,29 @@
 defmodule F1Bot.ExternalApi.Discord.Commands.Weather do
   @moduledoc """
-  Slash command `/weather` - live track weather from the OpenF1 API
-  (available during an active session; updates roughly every minute).
+  Slash command `/weather` - track weather from the F1 live timing feed
+  (air/track temperature, humidity, pressure, rainfall, wind). Available while
+  the session feed is live; otherwise shows the last readings of the session.
   """
-  require Logger
   alias Nostrum.Struct.Interaction
   alias F1Bot.ExternalApi.Discord.I18n
   alias F1Bot.ExternalApi.Discord.Commands.{Response, Common}
 
-  @finch F1Bot.Finch
-  @url "https://api.openf1.org/v1/weather?meeting_key=latest&session_key=latest"
   @color 0x3498DB
 
   def handle_interaction(interaction = %Interaction{}) do
     flags = Common.response_flags(interaction)
     locale = Common.locale(interaction)
 
-    # OpenF1 is an HTTP call, so acknowledge first and follow up with the result.
-    flags
-    |> Response.make_deferred_message()
-    |> Response.send_interaction_response(interaction)
+    response =
+      case F1Bot.weather() do
+        {:ok, weather} when map_size(weather) > 0 ->
+          Response.make_embed_message(flags, [build_embed(weather, locale)])
 
-    case fetch_latest() do
-      {:ok, weather} ->
-        flags
-        |> Response.make_followup_message(nil, [], [build_embed(weather, locale)])
-        |> Response.send_followup_response(interaction)
+        _ ->
+          Response.make_message(flags, I18n.t(:weather_none, locale))
+      end
 
-      {:error, :no_data} ->
-        flags
-        |> Response.make_followup_message(I18n.t(:weather_none, locale))
-        |> Response.send_followup_response(interaction)
-
-      {:error, reason} ->
-        Logger.warning("/weather: OpenF1 request failed: #{inspect(reason)}")
-
-        flags
-        |> Response.make_followup_message(I18n.t(:weather_unavailable, locale))
-        |> Response.send_followup_response(interaction)
-    end
-  end
-
-  defp fetch_latest do
-    case Finch.build(:get, @url, [{"user-agent", "f1bot"}])
-         |> Finch.request(@finch, receive_timeout: 12_000) do
-      {:ok, %{status: 200, body: body}} ->
-        case Jason.decode(body) do
-          {:ok, [_ | _] = list} -> {:ok, List.last(list)}
-          {:ok, _} -> {:error, :no_data}
-          {:error, reason} -> {:error, {:json, reason}}
-        end
-
-      {:ok, %{status: status}} ->
-        {:error, {:http, status}}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
+    Response.send_interaction_response(response, interaction)
   end
 
   defp build_embed(w, locale) do
@@ -65,12 +32,12 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Weather do
       color: @color,
       title: "⛅ #{I18n.t(:weather_title, locale)}",
       fields: [
-        field(I18n.t(:weather_air, locale), "#{num(w["air_temperature"])}°C"),
-        field(I18n.t(:weather_track, locale), "#{num(w["track_temperature"])}°C"),
+        field(I18n.t(:weather_air, locale), temp(w[:air_temp])),
+        field(I18n.t(:weather_track, locale), temp(w[:track_temp])),
         field(I18n.t(:weather_wind, locale), wind(w)),
-        field(I18n.t(:weather_humidity, locale), "#{num(w["humidity"])}%"),
-        field(I18n.t(:weather_pressure, locale), "#{num(w["pressure"])} hPa"),
-        field(I18n.t(:weather_rain, locale), rain(w["rainfall"], locale))
+        field(I18n.t(:weather_humidity, locale), percent(w[:humidity])),
+        field(I18n.t(:weather_pressure, locale), pressure(w[:pressure])),
+        field(I18n.t(:weather_rain, locale), rain(w[:rainfall], locale))
       ],
       footer: %{text: I18n.t(:weather_footer, locale)}
     }
@@ -78,21 +45,27 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Weather do
 
   defp field(name, value), do: %{name: name, value: value, inline: true}
 
-  defp num(nil), do: "-"
-  defp num(v), do: to_string(v)
+  defp temp(t) when is_number(t), do: "#{t}°C"
+  defp temp(_), do: "-"
 
-  # OpenF1 wind_speed is m/s; show km/h with the cardinal direction in degrees.
-  defp wind(%{"wind_speed" => speed} = w) when is_number(speed) do
-    kmh = Float.round(speed * 3.6, 1)
+  defp percent(h) when is_number(h), do: "#{h}%"
+  defp percent(_), do: "-"
 
-    case w["wind_direction"] do
-      dir when is_number(dir) -> "#{kmh} km/h (#{dir}°)"
+  defp pressure(p) when is_number(p), do: "#{p} hPa"
+  defp pressure(_), do: "-"
+
+  # F1 reports wind speed in m/s; show km/h with the direction in degrees.
+  defp wind(%{wind_speed: s} = w) when is_number(s) do
+    kmh = Float.round(s * 3.6, 1)
+
+    case w[:wind_direction] do
+      d when is_number(d) -> "#{kmh} km/h (#{trunc(d)}°)"
       _ -> "#{kmh} km/h"
     end
   end
 
   defp wind(_), do: "-"
 
-  defp rain(value, locale) when value in [1, true], do: I18n.t(:weather_rain_yes, locale)
-  defp rain(_value, locale), do: I18n.t(:weather_rain_no, locale)
+  defp rain(r, locale) when is_number(r) and r >= 1, do: I18n.t(:weather_rain_yes, locale)
+  defp rain(_r, locale), do: I18n.t(:weather_rain_no, locale)
 end

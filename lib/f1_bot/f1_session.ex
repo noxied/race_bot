@@ -32,6 +32,7 @@ defmodule F1Bot.F1Session do
     field(:clock, F1Session.Clock.t())
     field(:lap_counter, LapCounter.t(), default: LapCounter.new())
     field(:event_generator, F1Session.EventGenerator.t(), default: F1Session.EventGenerator.new())
+    field(:weather, map(), default: %{})
   end
 
   def new(), do: %__MODULE__{}
@@ -217,6 +218,15 @@ defmodule F1Bot.F1Session do
       |> Event.attach_session_info(session)
 
     {session, events}
+  end
+
+  @doc """
+  Merges the latest weather readings into the session (F1 sends partial updates,
+  so only non-nil fields overwrite the stored ones).
+  """
+  def push_weather(session, new_weather) do
+    fresh = for {k, v} <- new_weather, not is_nil(v), into: %{}, do: {k, v}
+    %{session | weather: Map.merge(session.weather || %{}, fresh)}
   end
 
   def push_track_status(session, track_status, timestamp) do

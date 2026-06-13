@@ -96,6 +96,14 @@ defmodule F1Bot do
   end
 
   @doc """
+  Returns the latest weather readings (air/track temperature, humidity,
+  pressure, rainfall, wind) from the live timing feed.
+  """
+  def weather() do
+    F1Bot.F1Session.Server.weather()
+  end
+
+  @doc """
   Returns a copy of the current `F1Session` session state for analysis.
 
   `light_copy` controls whether "heavy" data, such as position and car telemetry data

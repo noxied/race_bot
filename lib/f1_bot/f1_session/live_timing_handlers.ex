@@ -48,6 +48,10 @@ defmodule F1Bot.F1Session.LiveTimingHandlers do
     LiveTimingHandlers.LapCount.process_packet(session, packet, options)
   end
 
+  defp process_for_topic(session, packet = %Packet{topic: "WeatherData"}, options) do
+    LiveTimingHandlers.Weather.process_packet(session, packet, options)
+  end
+
   # Ignore initialization messages sent on other topics
   defp process_for_topic(session, _packet = %Packet{init: true}, _options) do
     result = %ProcessingResult{
