@@ -26,8 +26,7 @@ defmodule F1Bot.Output.Discord do
           "driver:tyre_change",
           "driver:transcript",
           "session_status:started",
-          "race_control:message",
-          "track_status:changed"
+          "race_control:message"
         ],
         25_000,
         false
@@ -230,27 +229,11 @@ defmodule F1Bot.Output.Discord do
     embed = %{
       type: "rich",
       color: 0xE10600,
-      title: "🚦 #{gp_name} — #{session_type}",
-      description: "🚦 Session just started"
+      title: "🚦 #{gp_name} - #{session_type}",
+      description: "Session just started"
     }
 
     F1Bot.ExternalApi.Discord.post_message({:embed, embed})
-
-    {:noreply, state}
-  end
-
-  @impl true
-  def handle_info(
-        _e = %{
-          scope: "track_status:changed",
-          payload: %{status: status}
-        },
-        state
-      ) do
-    case track_status_embed(status) do
-      nil -> :ok
-      embed -> F1Bot.ExternalApi.Discord.post_message({:embed, embed})
-    end
 
     {:noreply, state}
   end
@@ -267,24 +250,23 @@ defmodule F1Bot.Output.Discord do
         },
         state
       ) do
-    emoji =
-      case flag do
-        :yellow -> :flag_yellow
-        :red -> :flag_red
-        :chequered -> :flag_chequered
-        _ -> :announcement
-      end
-      |> F1Bot.ExternalApi.Discord.get_emoji_or_default(":information_source:")
+    case highlight_spec(flag, message) do
+      {emoji_key, fallback, label, color} ->
+        emoji = F1Bot.ExternalApi.Discord.get_emoji_or_default(emoji_key, fallback)
 
-    source_prefix =
-      cond do
-        source == :stewards -> "FIA Stewards: "
-        source == :stewards_correction -> "FIA Stewards correction: "
-        emoji == :announcement -> "Race Control: "
-        true -> ""
-      end
+        embed = %{
+          type: "rich",
+          color: color,
+          title: "#{emoji} #{label}",
+          description: "#{source_prefix(source)}#{message}"
+        }
 
-    F1Bot.ExternalApi.Discord.post_message("#{emoji} #{source_prefix}#{message}")
+        F1Bot.ExternalApi.Discord.post_message({:embed, embed})
+
+      nil ->
+        emoji = F1Bot.ExternalApi.Discord.get_emoji_or_default(:announcement, "📢")
+        F1Bot.ExternalApi.Discord.post_message("#{emoji} #{source_prefix(source)}#{message}")
+    end
 
     {:noreply, state}
   end
@@ -295,34 +277,37 @@ defmodule F1Bot.Output.Discord do
     {:noreply, state}
   end
 
-  # Compact, colour-coded embeds for headline track states.
-  defp track_status_embed(:all_clear),
-    do: status_embed(:flag_green, "🟢", "GREEN", "Track clear", 0x2ECC71)
+  # Highlight spec {emoji_key, fallback_emoji, label, colour} for flags and
+  # safety cars; nil means the message stays as plain text.
+  defp highlight_spec(:green, _msg), do: {:flag_green, "🟢", "GREEN FLAG", 0x2ECC71}
+  defp highlight_spec(:yellow, _msg), do: {:flag_yellow, "🟡", "YELLOW FLAG", 0xF1C40F}
 
-  defp track_status_embed(:yellow_flag),
-    do: status_embed(:flag_yellow, "🟡", "YELLOW FLAG", "Caution on track", 0xF1C40F)
+  defp highlight_spec(:"double yellow", _msg),
+    do: {:flag_yellow_red, "🟡", "DOUBLE YELLOW", 0xF1C40F}
 
-  defp track_status_embed(:red_flag),
-    do: status_embed(:flag_red, "🟥", "RED FLAG", "Session stopped", 0xE74C3C)
+  defp highlight_spec(:red, _msg), do: {:flag_red, "🟥", "RED FLAG", 0xE74C3C}
+  defp highlight_spec(:chequered, _msg), do: {:flag_chequered, "🏁", "CHEQUERED FLAG", 0xFFFFFF}
 
-  defp track_status_embed(:virtual_safety_car),
-    do: status_embed(:vsc, "🟡", "VIRTUAL SAFETY CAR", "VSC deployed", 0xF39C12)
+  defp highlight_spec(:"black and white", _msg),
+    do: {:flag_black_white, "🏴", "BLACK AND WHITE FLAG", 0x95A5A6}
 
-  defp track_status_embed(:safety_car),
-    do: status_embed(:safety_car, "🚗", "SAFETY CAR", "Safety Car deployed", 0xE67E22)
+  defp highlight_spec(:"black and orange", _msg),
+    do: {:flag_black_orange, "🟠", "BLACK AND ORANGE FLAG", 0xE67E22}
 
-  defp track_status_embed(_), do: nil
-
-  defp status_embed(emoji_key, fallback, title, detail, color) do
-    emoji = F1Bot.ExternalApi.Discord.get_emoji_or_default(emoji_key, fallback)
-
-    %{
-      type: "rich",
-      color: color,
-      title: "#{emoji} #{title}",
-      description: detail
-    }
+  # Safety car / VSC arrive without a Flag field; detect them from the message.
+  defp highlight_spec(_flag, msg) when is_binary(msg) do
+    cond do
+      msg =~ ~r/virtual safety car/iu -> {:vsc, "🟡", "VIRTUAL SAFETY CAR", 0xF39C12}
+      msg =~ ~r/safety car/iu -> {:safety_car, "🚗", "SAFETY CAR", 0xE67E22}
+      true -> nil
+    end
   end
+
+  defp highlight_spec(_flag, _msg), do: nil
+
+  defp source_prefix(:stewards), do: "FIA Stewards: "
+  defp source_prefix(:stewards_correction), do: "FIA Stewards correction: "
+  defp source_prefix(_), do: ""
 
   defp server_via() do
     __MODULE__

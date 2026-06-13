@@ -1,7 +1,7 @@
 defmodule F1Bot.ExternalApi.F1DB do
   @moduledoc """
-  Loads the F1DB dataset (https://github.com/f1db/f1db, CC-BY-4.0) — the
-  "splitted" JSON release — into memory and exposes queries used by the
+  Loads the F1DB dataset (https://github.com/f1db/f1db, CC-BY-4.0) - the
+  "splitted" JSON release - into memory and exposes queries used by the
   calendar / next-race / teams commands.
 
   The dataset is downloaded once on boot (asynchronously) and refreshed

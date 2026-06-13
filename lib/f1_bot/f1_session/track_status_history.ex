@@ -51,8 +51,6 @@ defmodule F1Bot.F1Session.TrackStatusHistory do
         lap_number,
         timestamp
       ) do
-    previous_status = current_status(intervals)
-
     intervals = maybe_end_previous_interval(intervals, lap_number, timestamp)
 
     intervals =
@@ -65,21 +63,8 @@ defmodule F1Bot.F1Session.TrackStatusHistory do
 
     self = %{self | intervals: intervals}
     events = to_chart_events(self)
-
-    events =
-      if track_status != previous_status do
-        change = Event.new("track_status:changed", %{status: track_status, previous: previous_status})
-        [change | events]
-      else
-        events
-      end
-
     {self, events}
   end
-
-  # Current status is the most recent still-open interval, else clear.
-  defp current_status([%{status: status, ends_at: nil} | _]), do: status
-  defp current_status(_), do: :all_clear
 
   @spec find_intervals_with_status(t(), [status()]) :: [interval()]
   def find_intervals_with_status(_self = %__MODULE__{intervals: intervals}, statuses) do

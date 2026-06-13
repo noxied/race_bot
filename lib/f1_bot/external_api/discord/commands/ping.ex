@@ -1,6 +1,6 @@
 defmodule F1Bot.ExternalApi.Discord.Commands.Ping do
   @moduledoc """
-  Slash command `/ping` — reports the bot's latency.
+  Slash command `/ping` - reports the bot's latency.
 
   Latency is derived from the interaction's snowflake timestamp (when Discord
   created it) compared to now, i.e. how long it took us to receive and answer.

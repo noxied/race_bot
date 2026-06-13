@@ -164,12 +164,12 @@ defmodule F1Bot.ExternalApi.Discord.I18n do
       es: "Lista los comandos disponibles y cómo usarlos"
     },
     help_title: %{
-      en: "F1 Bot — Commands",
-      pt: "F1 Bot — Comandos",
-      fr: "F1 Bot — Commandes",
-      it: "F1 Bot — Comandi",
-      de: "F1 Bot — Befehle",
-      es: "F1 Bot — Comandos"
+      en: "F1 Bot - Commands",
+      pt: "F1 Bot - Comandos",
+      fr: "F1 Bot - Commandes",
+      it: "F1 Bot - Comandi",
+      de: "F1 Bot - Befehle",
+      es: "F1 Bot - Comandos"
     },
     weather_cmd_desc: %{
       en: "Show live track weather (during a session)",

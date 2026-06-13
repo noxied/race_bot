@@ -1,6 +1,6 @@
 defmodule F1Bot.ExternalApi.Discord.Commands.Calendar do
   @moduledoc """
-  Slash command `/calendar` — shows the current F1 season calendar (data from F1DB).
+  Slash command `/calendar` - shows the current F1 season calendar (data from F1DB).
   """
   alias Nostrum.Struct.Interaction
   alias F1Bot.ExternalApi.F1DB
@@ -33,7 +33,7 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Calendar do
       Enum.map_join(races, "\n", fn r ->
         round = String.pad_leading(to_string(r.round), 2)
         flag = Common.flag_emoji(r.country_code)
-        "`#{round}` #{flag} **#{r.grand_prix}** — #{Common.date_timestamp(r.date)}"
+        "`#{round}` #{flag} **#{r.grand_prix}** - #{Common.date_timestamp(r.date)}"
       end)
 
     %{

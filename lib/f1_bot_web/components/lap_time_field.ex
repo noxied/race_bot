@@ -33,7 +33,7 @@ defmodule F1BotWeb.Component.LapTimeField do
 
   defp format_value(stat, can_drop_minute) do
     case stat.value do
-      nil -> "—"
+      nil -> "-"
       value -> Format.format_lap_time(value, can_drop_minute)
     end
   end

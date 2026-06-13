@@ -1,6 +1,6 @@
 defmodule F1Bot.ExternalApi.Discord.Commands.Drivers do
   @moduledoc """
-  Slash command `/drivers` — current driver championship standings (F1DB).
+  Slash command `/drivers` - current driver championship standings (F1DB).
   """
   alias Nostrum.Struct.Interaction
   alias F1Bot.ExternalApi.F1DB

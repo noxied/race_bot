@@ -1,6 +1,6 @@
 defmodule F1Bot.ExternalApi.Discord.Commands.Teams do
   @moduledoc """
-  Slash command `/teams` — current constructor (team) championship standings (F1DB).
+  Slash command `/teams` - current constructor (team) championship standings (F1DB).
   """
   alias Nostrum.Struct.Interaction
   alias F1Bot.ExternalApi.F1DB

@@ -1,6 +1,6 @@
 defmodule F1Bot.ExternalApi.Discord.Commands.NextRace do
   @moduledoc """
-  Slash command `/nextrace` — shows the next F1 race weekend.
+  Slash command `/nextrace` - shows the next F1 race weekend.
 
   Race metadata (circuit, country, round, layout image) comes from F1DB; exact
   session start times are overlaid from the ICS calendar (`F1Calendar`) when
@@ -85,7 +85,7 @@ defmodule F1Bot.ExternalApi.Discord.Commands.NextRace do
     %{
       type: "rich",
       color: @color,
-      title: String.trim("#{flag} #{I18n.t(:nextrace_title, locale)} — #{race.grand_prix}"),
+      title: String.trim("#{flag} #{I18n.t(:nextrace_title, locale)} - #{race.grand_prix}"),
       description: description,
       footer: %{text: I18n.t(:tz_footer, locale)}
     }
@@ -122,7 +122,7 @@ defmodule F1Bot.ExternalApi.Discord.Commands.NextRace do
             {Common.session_timestamp(date, time), Common.session_past?(date, time, now)}
         end
 
-      line = "#{icon} **#{I18n.session_label(key, locale)}** — #{timestamp}"
+      line = "#{icon} **#{I18n.session_label(key, locale)}** - #{timestamp}"
       if past?, do: "~~#{line}~~", else: line
     end)
   end

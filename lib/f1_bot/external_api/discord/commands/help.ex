@@ -1,6 +1,6 @@
 defmodule F1Bot.ExternalApi.Discord.Commands.Help do
   @moduledoc """
-  Slash command `/help` — lists the available commands and how to use them.
+  Slash command `/help` - lists the available commands and how to use them.
   """
   alias Nostrum.Struct.Interaction
   alias F1Bot.ExternalApi.Discord.I18n
@@ -27,7 +27,7 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Help do
 
     lines =
       Enum.map_join(@commands, "\n", fn {name, desc} ->
-        "**#{name}** — #{describe(desc, locale)}"
+        "**#{name}** - #{describe(desc, locale)}"
       end)
 
     embed = %{

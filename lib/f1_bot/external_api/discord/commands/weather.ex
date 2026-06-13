@@ -1,6 +1,6 @@
 defmodule F1Bot.ExternalApi.Discord.Commands.Weather do
   @moduledoc """
-  Slash command `/weather` — live track weather from the OpenF1 API
+  Slash command `/weather` - live track weather from the OpenF1 API
   (available during an active session; updates roughly every minute).
   """
   require Logger
@@ -76,7 +76,7 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Weather do
 
   defp field(name, value), do: %{name: name, value: value, inline: true}
 
-  defp num(nil), do: "—"
+  defp num(nil), do: "-"
   defp num(v), do: to_string(v)
 
   # OpenF1 wind_speed is m/s; show km/h with the cardinal direction in degrees.
@@ -89,7 +89,7 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Weather do
     end
   end
 
-  defp wind(_), do: "—"
+  defp wind(_), do: "-"
 
   defp rain(value, locale) when value in [1, true], do: I18n.t(:weather_rain_yes, locale)
   defp rain(_value, locale), do: I18n.t(:weather_rain_no, locale)

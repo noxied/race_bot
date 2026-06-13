@@ -9,7 +9,7 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Standings do
     lines =
       Enum.map_join(standings, "\n", fn s ->
         pos = String.pad_leading(to_string(s.position), 2)
-        "`#{pos}` **#{name_fun.(s)}** — #{format_points(s.points)}"
+        "`#{pos}` **#{name_fun.(s)}** - #{format_points(s.points)}"
       end)
 
     %{type: "rich", color: color, title: title, description: lines}
