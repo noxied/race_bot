@@ -53,18 +53,19 @@ defmodule F1Bot.F1Session.LiveTimingHandlers do
   end
 
   # Reconnect snapshot for race control: the feed replays the whole session's
-  # messages as an init packet. Process it (deduped downstream) only when we
-  # already have history to compare against, so we backfill what was missed
-  # during downtime without re-posting the entire session on a cold start.
+  # messages as an init packet. Backfill what was missed during downtime only
+  # when the session is actually live (so a restart after a session is over does
+  # not dump old messages into the channel) and we already have history to dedupe
+  # against (so a cold start does not re-post the entire session).
   defp process_for_topic(
          session,
          packet = %Packet{topic: "RaceControlMessages", init: true},
          options
        ) do
-    if session.race_control.messages == [] do
-      {:ok, %ProcessingResult{session: session, events: []}}
-    else
+    if session.race_control.messages != [] and session.session_status in [:started, :aborted] do
       LiveTimingHandlers.RaceControlMessages.process_packet(session, packet, options)
+    else
+      {:ok, %ProcessingResult{session: session, events: []}}
     end
   end
 
