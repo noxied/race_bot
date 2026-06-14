@@ -234,6 +234,17 @@ defmodule F1Bot.F1Session do
     end
   end
 
+  @doc """
+  Updates only the live running order (positions/gaps/pit/retired) from a list of
+  `TimingData`, without touching lap data or emitting events. Used to refresh the
+  order from the reconnect snapshot, which the normal pipeline ignores.
+  """
+  def refresh_live_timing(session, timing_data_list) do
+    Enum.reduce(timing_data_list, session, fn td, session ->
+      merge_live_timing(session, td)
+    end)
+  end
+
   def push_stint_data(
         session,
         driver_number,

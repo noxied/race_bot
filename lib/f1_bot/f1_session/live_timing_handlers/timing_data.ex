@@ -11,7 +11,7 @@ defmodule F1Bot.F1Session.LiveTimingHandlers.TimingData do
 
   alias F1Bot.F1Session
   alias F1Bot.DataTransform.Parse
-  alias LiveTimingHandlers.{Packet, ProcessingOptions, ProcessingResult}
+  alias LiveTimingHandlers.{Packet, ProcessingResult}
 
   @type sector_times :: %{
           optional(1) => Timex.Duration.t(),
@@ -42,18 +42,32 @@ defmodule F1Bot.F1Session.LiveTimingHandlers.TimingData do
         %Packet{
           topic: @scope,
           data: %{"Lines" => drivers = %{}},
-          timestamp: timestamp
+          timestamp: timestamp,
+          init: init
         },
         options
       ) do
-    {session, events_nested} = handle_lines(session, drivers, timestamp, options)
+    lines =
+      drivers
+      |> Enum.map(fn {num_str, data} -> {parse_driver_number(num_str), data} end)
+      |> Enum.filter(fn {driver_number, _data} -> driver_number != nil end)
 
-    result = %ProcessingResult{
-      session: session,
-      events: List.flatten(events_nested)
-    }
+    {session, events} =
+      if init do
+        # Reconnect snapshot: refresh the running order (positions/gaps) only.
+        # No lap replay and no events, so it just corrects /positions without
+        # re-posting anything.
+        timing_data_list =
+          Enum.map(lines, fn {driver_number, data} ->
+            build_timing_data(driver_number, data, timestamp)
+          end)
 
-    {:ok, result}
+        {F1Session.refresh_live_timing(session, timing_data_list), []}
+      else
+        push_lines(session, lines, timestamp, options)
+      end
+
+    {:ok, %ProcessingResult{session: session, events: events}}
   end
 
   @impl F1Bot.F1Session.LiveTimingHandlers
@@ -61,56 +75,41 @@ defmodule F1Bot.F1Session.LiveTimingHandlers.TimingData do
     {:error, :invalid_packet}
   end
 
-  defp handle_lines(session, drivers, timestamp, options) do
-    drivers
-    |> Stream.map(fn {driver_num_str, data} ->
-      case Integer.parse(driver_num_str) do
-        {driver_number, ""} ->
-          {driver_number, data}
+  defp push_lines(session, lines, timestamp, options) do
+    {session, events_nested} =
+      Enum.reduce(lines, {session, []}, fn {driver_number, data}, {session, events} ->
+        maybe_log_driver_data("TimingData", driver_number, {timestamp, data}, options)
+        timing_data = build_timing_data(driver_number, data, timestamp)
 
-        _ ->
-          {nil, data}
-      end
-    end)
-    |> Stream.filter(fn {driver_number, _data} -> driver_number != nil end)
-    |> Enum.reduce({session, []}, fn line, acc ->
-      handle_line(line, acc, timestamp, options)
-    end)
+        {session, new_events} =
+          F1Session.push_timing_data(session, timing_data, !!options.skip_heavy_events)
+
+        {session, [new_events | events]}
+      end)
+
+    {session, List.flatten(events_nested)}
   end
 
-  defp handle_line(
-         _line = {driver_number, data},
-         _acc = {session, events},
-         timestamp,
-         options = %ProcessingOptions{}
-       ) do
-    maybe_log_driver_data("TimingData", driver_number, {timestamp, data}, options)
+  defp parse_driver_number(num_str) do
+    case Integer.parse(num_str) do
+      {driver_number, ""} -> driver_number
+      _ -> nil
+    end
+  end
 
-    lap_number = data["NumberOfLaps"]
-    lap_time = maybe_extract_lap_time(data)
-    sector_times = maybe_extract_sectors(data)
-
-    timing_data = %__MODULE__{
+  defp build_timing_data(driver_number, data, timestamp) do
+    %__MODULE__{
       driver_number: driver_number,
       timestamp: timestamp,
-      lap_number: lap_number,
-      lap_time: lap_time,
-      sector_times: sector_times,
+      lap_number: data["NumberOfLaps"],
+      lap_time: maybe_extract_lap_time(data),
+      sector_times: maybe_extract_sectors(data),
       position: parse_position(data["Position"]),
       gap_to_leader: blank_to_nil(data["GapToLeader"]),
       interval: blank_to_nil(get_in(data, ["IntervalToPositionAhead", "Value"])),
       in_pit: data["InPit"],
       retired: data["Retired"]
     }
-
-    {session, new_events} =
-      F1Session.push_timing_data(
-        session,
-        timing_data,
-        !!options.skip_heavy_events
-      )
-
-    {session, [new_events | events]}
   end
 
   defp maybe_extract_lap_time(data) do

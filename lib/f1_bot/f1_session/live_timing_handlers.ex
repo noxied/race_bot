@@ -69,6 +69,13 @@ defmodule F1Bot.F1Session.LiveTimingHandlers do
     end
   end
 
+  # Reconnect snapshot for timing: refresh the running order (positions/gaps) from
+  # the snapshot so /positions is correct right after a reconnect (the snapshot
+  # holds the current/final order). The handler emits no events for init packets.
+  defp process_for_topic(session, packet = %Packet{topic: "TimingData", init: true}, options) do
+    LiveTimingHandlers.TimingData.process_packet(session, packet, options)
+  end
+
   # Ignore initialization messages sent on other topics
   defp process_for_topic(session, _packet = %Packet{init: true}, _options) do
     result = %ProcessingResult{
