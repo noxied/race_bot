@@ -45,7 +45,7 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Positions do
     s = data.standings
 
     [
-      %{name: I18n.t(:positions_col_driver, locale), value: col_driver(s), inline: true},
+      %{name: I18n.t(:positions_col_driver, locale), value: col_driver(s, data.live), inline: true},
       second_field(data, locale)
     ]
   end
@@ -56,33 +56,43 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Positions do
   defp second_field(data, locale),
     do: %{name: I18n.t(:positions_col_bestlap, locale), value: col_bestlap(data.standings), inline: true}
 
-  defp col_driver(standings) do
+  defp col_driver(standings, live) do
     Enum.map_join(standings, "\n", fn e ->
       pos = e.position |> to_string() |> String.pad_leading(2)
-      "`P#{pos}` `#{e.name}`#{driver_marker(e)}"
+      "`P#{pos}` `#{e.name}`#{markers(e, live)}"
     end)
   end
 
-  defp driver_marker(%{retired: true}), do: " **OUT**"
-  defp driver_marker(%{in_pit: true}), do: " 🅿️"
-  defp driver_marker(_), do: ""
+  # Fastest-lap marker (always, both quali and race) plus retirement/pit status.
+  # The pit marker is only meaningful while the session is live (otherwise every
+  # car reads as parked).
+  defp markers(e, live) do
+    fl = if e.fastest_lap, do: " #{fastest_emoji()}", else: ""
+
+    status =
+      cond do
+        e.retired -> " **OUT**"
+        live and e.in_pit -> " 🅿️"
+        true -> ""
+      end
+
+    fl <> status
+  end
 
   defp col_bestlap(standings) do
-    Enum.map_join(standings, "\n", fn e ->
-      fl = if e.fastest_lap and e.best_lap_ms, do: " #{fastest_emoji()}", else: ""
-      "`#{format_ms(e.best_lap_ms)}`#{fl}"
-    end)
+    Enum.map_join(standings, "\n", fn e -> "`#{format_ms(e.best_lap_ms)}`" end)
   end
 
   defp col_gap(standings) do
     Enum.map_join(standings, "\n", fn e -> "`#{gap_value(e)}`" end)
   end
 
+  # Header reads "Gap", so show gap to the leader; fall back to interval.
   defp gap_value(e) do
     cond do
       e.position == 1 -> "-"
-      e.interval -> e.interval
       e.gap_to_leader -> e.gap_to_leader
+      e.interval -> e.interval
       true -> "-"
     end
   end
