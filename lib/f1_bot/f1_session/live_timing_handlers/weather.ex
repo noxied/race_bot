@@ -12,13 +12,13 @@ defmodule F1Bot.F1Session.LiveTimingHandlers.Weather do
   @scope "WeatherData"
 
   @impl LiveTimingHandlers
-  def process_packet(session, %Packet{topic: @scope, data: data}, _options) do
-    session = F1Session.push_weather(session, parse(data))
+  def process_packet(session, %Packet{topic: @scope, data: data, timestamp: timestamp}, _options) do
+    session = F1Session.push_weather(session, parse(data, timestamp))
 
     {:ok, %ProcessingResult{session: session, events: []}}
   end
 
-  defp parse(data) do
+  defp parse(data, timestamp) do
     %{
       air_temp: num(data["AirTemp"]),
       track_temp: num(data["TrackTemp"]),
@@ -26,7 +26,10 @@ defmodule F1Bot.F1Session.LiveTimingHandlers.Weather do
       pressure: num(data["Pressure"]),
       rainfall: num(data["Rainfall"]),
       wind_speed: num(data["WindSpeed"]),
-      wind_direction: num(data["WindDirection"])
+      wind_direction: num(data["WindDirection"]),
+      # When this reading was taken (from the feed packet), so /weather can show
+      # how recent it is.
+      timestamp: timestamp
     }
   end
 

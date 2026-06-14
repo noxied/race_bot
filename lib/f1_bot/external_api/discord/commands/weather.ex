@@ -45,7 +45,18 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Weather do
       ],
       footer: %{text: I18n.t(footer, locale)}
     }
+    |> maybe_put_timestamp(w[:timestamp])
   end
+
+  # Native embed timestamp (rendered in each viewer's local timezone next to the
+  # footer) so it's clear how recent the reading is.
+  defp maybe_put_timestamp(embed, %DateTime{} = ts),
+    do: Map.put(embed, :timestamp, DateTime.to_iso8601(ts))
+
+  defp maybe_put_timestamp(embed, %NaiveDateTime{} = ts),
+    do: Map.put(embed, :timestamp, ts |> DateTime.from_naive!("Etc/UTC") |> DateTime.to_iso8601())
+
+  defp maybe_put_timestamp(embed, _), do: embed
 
   defp field(name, value), do: %{name: name, value: value, inline: true}
 
