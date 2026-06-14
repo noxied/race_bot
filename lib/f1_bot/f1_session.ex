@@ -309,6 +309,23 @@ defmodule F1Bot.F1Session do
     {session, events}
   end
 
+  @doc """
+  Pushes the reconnect snapshot of race control messages, emitting events only
+  for the ones missed during downtime (see `RaceControl.backfill_messages/2`).
+  """
+  def backfill_race_control_messages(session, messages) do
+    {race_control, events} =
+      session.race_control
+      |> F1Session.RaceControl.backfill_messages(messages)
+
+    events =
+      events
+      |> Event.attach_session_info(session)
+
+    session = %{session | race_control: race_control}
+    {session, events}
+  end
+
   def push_session_info(session, session_info, local_time, ignore_reset) do
     {session_info, events, should_reset} =
       session.session_info

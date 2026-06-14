@@ -52,6 +52,22 @@ defmodule F1Bot.F1Session.LiveTimingHandlers do
     LiveTimingHandlers.Weather.process_packet(session, packet, options)
   end
 
+  # Reconnect snapshot for race control: the feed replays the whole session's
+  # messages as an init packet. Process it (deduped downstream) only when we
+  # already have history to compare against, so we backfill what was missed
+  # during downtime without re-posting the entire session on a cold start.
+  defp process_for_topic(
+         session,
+         packet = %Packet{topic: "RaceControlMessages", init: true},
+         options
+       ) do
+    if session.race_control.messages == [] do
+      {:ok, %ProcessingResult{session: session, events: []}}
+    else
+      LiveTimingHandlers.RaceControlMessages.process_packet(session, packet, options)
+    end
+  end
+
   # Ignore initialization messages sent on other topics
   defp process_for_topic(session, _packet = %Packet{init: true}, _options) do
     result = %ProcessingResult{

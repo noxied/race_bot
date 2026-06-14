@@ -9,6 +9,9 @@ defmodule F1Bot.F1Session.RaceControl.Message do
     field(:message, String.t())
     field(:flag, atom())
     field(:mentions, list())
+    # Stable per-message id from the feed (its UTC timestamp), used to dedupe
+    # when backfilling missed messages after a reconnect.
+    field(:dedup_key, String.t())
   end
 
   def new do

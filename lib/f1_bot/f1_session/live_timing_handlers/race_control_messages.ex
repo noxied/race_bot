@@ -19,7 +19,8 @@ defmodule F1Bot.F1Session.LiveTimingHandlers.RaceControlMessages do
         session,
         %Packet{
           topic: @scope,
-          data: data
+          data: data,
+          init: init
         },
         _options
       ) do
@@ -29,7 +30,15 @@ defmodule F1Bot.F1Session.LiveTimingHandlers.RaceControlMessages do
       |> parse_message()
       |> filter_messages()
 
-    {session, events} = F1Session.push_race_control_messages(session, messages)
+    # An `init` packet is the reconnect snapshot (the whole session's messages),
+    # so dedupe against what we already have and only emit the ones missed while
+    # we were down. Normal deltas are emitted as-is.
+    {session, events} =
+      if init do
+        F1Session.backfill_race_control_messages(session, messages)
+      else
+        F1Session.push_race_control_messages(session, messages)
+      end
 
     result = %ProcessingResult{
       session: session,
@@ -67,7 +76,8 @@ defmodule F1Bot.F1Session.LiveTimingHandlers.RaceControlMessages do
         flag: flag,
         message: message,
         mentions: mentions,
-        source: source
+        source: source,
+        dedup_key: m["Utc"]
       }
     end
   end
