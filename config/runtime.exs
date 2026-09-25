@@ -53,20 +53,25 @@ config :f1_bot,
   session_alert_minutes:
     System.get_env("SESSION_ALERT_MINUTES", "60,30,15") |> str_to_list.() |> list_to_int.()
 
+# Fluxer output (https://docs.fluxer.app). The bot posts to these channels via
+# the Fluxer REST API. FLUXER_API_BASE is optional (defaults to FLUXER_ORIGIN/api).
+config :f1_bot,
+  fluxer_origin: System.get_env("FLUXER_ORIGIN"),
+  fluxer_api_base: System.get_env("FLUXER_API_BASE"),
+  fluxer_bot_token: System.get_env("FLUXER_BOT_TOKEN"),
+  fluxer_channel_ids_messages:
+    System.get_env("FLUXER_CHANNEL_IDS_MESSAGES", "") |> str_to_list.() |> list_to_int.(),
+  fluxer_channel_ids_radios:
+    System.get_env("FLUXER_CHANNEL_IDS_RADIOS", "") |> str_to_list.() |> list_to_int.()
+
 if config_env() == :prod do
   unless demo_mode_enabled do
     config :f1_bot,
       connect_to_signalr: true,
-      start_discord: true,
-      # "global" (default) = commands in every server, ~1h to propagate.
-      # "guild" = instant updates, only in the servers listed in
-      # DISCORD_SERVER_IDS_COMMANDS. Handy for development.
-      discord_command_mode:
-        (case System.get_env("DISCORD_COMMAND_MODE", "global") do
-           "guild" -> :guild
-           _ -> :global
-         end),
-      discord_api_module: F1Bot.ExternalApi.Discord.Live
+      # Fluxer port: output goes to Fluxer over REST. The Discord gateway and
+      # slash commands (Nostrum) are not started; commands are a later phase.
+      start_discord: false,
+      discord_api_module: F1Bot.ExternalApi.Fluxer
   end
 
   database_path =
