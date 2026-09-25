@@ -71,7 +71,10 @@ defmodule F1Bot.F1Session do
           fastest_lap: num == fastest_num
         }
       end)
-      |> Enum.filter(&(&1.position != nil))
+      # Drop stale entries left in live_timing for driver numbers no longer in the
+      # session (they show up as a bare number with no name/tyres and duplicate a
+      # real driver's position).
+      |> Enum.filter(&(&1.position != nil and &1.name != nil))
       |> Enum.sort_by(& &1.position)
 
     case entries do
@@ -135,10 +138,12 @@ defmodule F1Bot.F1Session do
     end
   end
 
+  # Returns the driver's name, or nil when the number is not in the session's
+  # driver cache (used to drop stale live_timing entries).
   defp driver_name(session, num) do
     case DriverCache.get_driver_by_number(session.driver_cache, num) do
       {:ok, d} -> d.last_name || d.full_name || d.driver_abbr || "##{num}"
-      _ -> "##{num}"
+      _ -> nil
     end
   end
 
