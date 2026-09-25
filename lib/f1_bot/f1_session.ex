@@ -55,12 +55,13 @@ defmodule F1Bot.F1Session do
       session.live_timing
       |> Enum.map(fn {num, lt} ->
         {compounds, tyre_age} = tyre_info(session, num)
+        {name, known?} = driver_name(session, num)
 
         %{
           position: lt[:position],
           driver_number: num,
-          name: driver_name(session, num),
-          abbr: driver_abbr_or_num(session, num),
+          name: name,
+          known?: known?,
           gap_to_leader: lt[:gap_to_leader],
           interval: lt[:interval],
           in_pit: lt[:in_pit] == true,
@@ -71,10 +72,8 @@ defmodule F1Bot.F1Session do
           fastest_lap: num == fastest_num
         }
       end)
-      # Drop stale entries left in live_timing for driver numbers no longer in the
-      # session (they show up as a bare number with no name/tyres and duplicate a
-      # real driver's position).
-      |> Enum.filter(&(&1.position != nil and &1.name != nil))
+      |> Enum.filter(&(&1.position != nil))
+      |> dedup_by_position()
       |> Enum.sort_by(& &1.position)
 
     case entries do
@@ -131,21 +130,31 @@ defmodule F1Bot.F1Session do
     end
   end
 
-  defp driver_abbr_or_num(session, num) do
+  # {display_name, known?} where known? is whether the number is in the session's
+  # driver cache. Uncached numbers (reserves not listed, or stale residue) show as
+  # "#<num>" and rank below real drivers when two share a position.
+  defp driver_name(session, num) do
     case DriverCache.get_driver_by_number(session.driver_cache, num) do
-      {:ok, d} -> d.driver_abbr || d.last_name || "##{num}"
-      _ -> "##{num}"
+      {:ok, d} -> {d.last_name || d.full_name || d.driver_abbr || "##{num}", true}
+      _ -> {"##{num}", false}
     end
   end
 
-  # Returns the driver's name, or nil when the number is not in the session's
-  # driver cache (used to drop stale live_timing entries).
-  defp driver_name(session, num) do
-    case DriverCache.get_driver_by_number(session.driver_cache, num) do
-      {:ok, d} -> d.last_name || d.full_name || d.driver_abbr || "##{num}"
-      _ -> nil
-    end
+  # Stale live_timing can leave two drivers at the same position. Keep the best
+  # per position (a real cached driver with lap/tyre data) and drop the ghost; a
+  # driver alone at a position (e.g. a reserve) is always kept.
+  defp dedup_by_position(entries) do
+    entries
+    |> Enum.group_by(& &1.position)
+    |> Enum.map(fn {_pos, group} -> Enum.max_by(group, &entry_rank/1) end)
   end
+
+  defp entry_rank(e) do
+    {bool_to_int(e.known?), bool_to_int(e.best_lap_ms != nil), bool_to_int(e.tyres != [])}
+  end
+
+  defp bool_to_int(true), do: 1
+  defp bool_to_int(false), do: 0
 
   # {[compound], current_tyre_age_in_laps} for the driver. Compounds are the stint
   # history in chronological order; the age is for the current (last) stint, using
