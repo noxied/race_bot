@@ -28,6 +28,20 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Calendar do
     Response.send_interaction_response(response, interaction)
   end
 
+  @doc "Response payload (shared with the Fluxer command layer)."
+  def payload(locale) do
+    case F1DB.current_season_races() do
+      {:ok, %{year: year, races: races}} when races != [] ->
+        {:embeds, [build_embed(year, races, locale)]}
+
+      {:ok, _empty} ->
+        {:message, I18n.t(:none_found, locale)}
+
+      {:error, :not_loaded} ->
+        {:message, I18n.t(:data_not_ready, locale)}
+    end
+  end
+
   defp build_embed(year, races, locale) do
     lines =
       Enum.map_join(races, "\n", fn r ->

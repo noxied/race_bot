@@ -2,12 +2,22 @@ defmodule F1Bot.ExternalApi.Fluxer.Commands do
   @moduledoc """
   Parses `!` prefix commands from Fluxer `MESSAGE_CREATE` events and replies in the
   same channel over REST. Fluxer has no slash commands, so this is the equivalent
-  of the Discord slash command layer.
+  of the Discord slash command layer, reusing each command's `payload/1`.
   """
   require Logger
 
   alias F1Bot.ExternalApi.Fluxer
   alias F1Bot.ExternalApi.Discord.I18n
+
+  alias F1Bot.ExternalApi.Discord.Commands.{
+    NextRace,
+    Calendar,
+    Weather,
+    Positions,
+    Tyres,
+    Teams,
+    Drivers
+  }
 
   @prefix "!"
 
@@ -33,9 +43,22 @@ defmodule F1Bot.ExternalApi.Fluxer.Commands do
 
   defp dispatch("ping", _args, ch), do: reply(ch, %{content: "🏓 Pong!"})
   defp dispatch("help", _args, ch), do: reply(ch, %{embeds: [help_embed()]})
+
+  defp dispatch("nextrace", _args, ch), do: reply_payload(ch, NextRace.payload(locale()))
+  defp dispatch("next-race", args, ch), do: dispatch("nextrace", args, ch)
+  defp dispatch("calendar", _args, ch), do: reply_payload(ch, Calendar.payload(locale()))
+  defp dispatch("weather", _args, ch), do: reply_payload(ch, Weather.payload(locale()))
+  defp dispatch("positions", _args, ch), do: reply_payload(ch, Positions.payload(locale()))
+  defp dispatch("tyres", _args, ch), do: reply_payload(ch, Tyres.payload(locale()))
+  defp dispatch("teams", _args, ch), do: reply_payload(ch, Teams.payload(locale()))
+  defp dispatch("drivers", _args, ch), do: reply_payload(ch, Drivers.payload(locale()))
+
   defp dispatch(_unknown, _args, _ch), do: :ok
 
   # ---- helpers ------------------------------------------------------------
+
+  defp reply_payload(ch, {:embeds, embeds}), do: reply(ch, %{embeds: embeds})
+  defp reply_payload(ch, {:message, content}), do: reply(ch, %{content: content})
 
   defp reply(channel_id, body) do
     case Fluxer.post_to_channel(channel_id, body) do

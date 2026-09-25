@@ -32,4 +32,23 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Drivers do
 
     Response.send_interaction_response(response, interaction)
   end
+
+  @doc "Response payload (shared with the Fluxer command layer)."
+  def payload(locale) do
+    with {:ok, year} <- F1DB.current_season(),
+         {:ok, %{standings: [_ | _] = standings}} <- F1DB.driver_standings(year) do
+      embed =
+        Standings.embed(
+          I18n.t(:drivers_title, locale, %{year: year}),
+          standings,
+          & &1.driver,
+          @color
+        )
+
+      {:embeds, [embed]}
+    else
+      {:error, :not_loaded} -> {:message, I18n.t(:data_not_ready, locale)}
+      _ -> {:message, I18n.t(:none_found, locale)}
+    end
+  end
 end

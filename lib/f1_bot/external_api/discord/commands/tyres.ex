@@ -28,6 +28,14 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Tyres do
     Response.send_interaction_response(response, interaction)
   end
 
+  @doc "Response payload (shared with the Fluxer command layer)."
+  def payload(locale) do
+    case F1Bot.live_standings() do
+      {:ok, %{standings: [_ | _]} = data} -> {:embeds, [build_embed(data, locale)]}
+      _ -> {:message, I18n.t(:tyres_none, locale)}
+    end
+  end
+
   defp build_embed(data, locale) do
     %{
       type: "rich",

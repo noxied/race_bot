@@ -58,6 +58,15 @@ defmodule F1Bot.ExternalApi.Discord.Commands.NextRace do
     Response.send_interaction_response(response, interaction)
   end
 
+  @doc "Response payload (shared with the Fluxer command layer)."
+  def payload(locale) do
+    case F1DB.next_race() do
+      {:ok, race} -> {:embeds, [build_embed(race, locale)]}
+      {:error, :no_upcoming_race} -> {:message, I18n.t(:nextrace_none, locale)}
+      {:error, :not_loaded} -> {:message, I18n.t(:data_not_ready, locale)}
+    end
+  end
+
   defp build_embed(race, locale) do
     flag = Common.flag_emoji(race.country_code)
     now = DateTime.utc_now()

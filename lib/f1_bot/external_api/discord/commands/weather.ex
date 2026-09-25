@@ -26,6 +26,14 @@ defmodule F1Bot.ExternalApi.Discord.Commands.Weather do
     Response.send_interaction_response(response, interaction)
   end
 
+  @doc "Response payload (shared with the Fluxer command layer)."
+  def payload(locale) do
+    case F1Bot.weather() do
+      {:ok, weather} when map_size(weather) > 0 -> {:embeds, [build_embed(weather, locale, live?())]}
+      _ -> {:message, I18n.t(:weather_none, locale)}
+    end
+  end
+
   defp live?, do: match?({:ok, :started}, F1Bot.session_status())
 
   defp build_embed(w, locale, live) do
