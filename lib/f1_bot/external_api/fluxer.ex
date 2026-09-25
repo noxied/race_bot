@@ -1,14 +1,16 @@
 defmodule F1Bot.ExternalApi.Fluxer do
   @moduledoc """
-  Posts messages and rich embeds to Fluxer channels over the REST API. Implements
-  the same `post_message/1` contract as the Discord output, so it is a drop-in
-  replacement selected through the `:discord_api_module` config.
+  Fluxer REST output and shared connection helpers (https://docs.fluxer.app).
 
-  Auth is `Authorization: Bot <app_id>.<secret>` (the bot token). The REST base is
-  `<FLUXER_ORIGIN>/api` (matching the instance discovery document's
-  `endpoints.api_public`, overridable with `FLUXER_API_BASE`); messages are sent to
-  `<base>/v1/channels/{id}/messages`. Fluxer embeds are Discord-shaped, so the
-  embed maps built elsewhere are posted as-is.
+  `post_message/1` implements the same contract as the Discord output, so it is a
+  drop-in selected through the `:discord_api_module` config. `post_to_channel/2`,
+  `bot_token/0` and `gateway_url/0` are shared with the gateway client used for
+  prefix commands.
+
+  Auth is `Authorization: Bot <app_id>.<secret>`. The REST base is
+  `<FLUXER_ORIGIN>/api` (the instance discovery `endpoints.api_public`, overridable
+  with `FLUXER_API_BASE`); messages go to `<base>/v1/channels/{id}/messages`.
+  Fluxer embeds are Discord-shaped, so the embed maps built elsewhere post as-is.
   """
   require Logger
   @behaviour F1Bot.ExternalApi.Discord
@@ -40,7 +42,7 @@ defmodule F1Bot.ExternalApi.Fluxer do
     Logger.info("[FLUXER] #{describe(payload)} (to channels: #{inspect(channel_ids)})")
 
     for channel_id <- channel_ids do
-      case send_message(channel_id, body) do
+      case post_to_channel(channel_id, body) do
         :ok ->
           :ok
 
@@ -52,9 +54,13 @@ defmodule F1Bot.ExternalApi.Fluxer do
     :ok
   end
 
-  defp send_message(channel_id, body) do
+  @doc """
+  Posts a message body (`%{content: ...}` or `%{embeds: [...]}`) to a channel via
+  REST. Shared by the live output and by command replies.
+  """
+  def post_to_channel(channel_id, body) do
     with {:ok, base} <- api_base(),
-         {:ok, token} <- token() do
+         {:ok, token} <- bot_token() do
       url = "#{base}/v1/channels/#{channel_id}/messages"
 
       headers = [
@@ -62,9 +68,7 @@ defmodule F1Bot.ExternalApi.Fluxer do
         {"content-type", "application/json"}
       ]
 
-      json = Jason.encode!(body)
-
-      case Finch.build(:post, url, headers, json)
+      case Finch.build(:post, url, headers, Jason.encode!(body))
            |> Finch.request(@finch, receive_timeout: 15_000) do
         {:ok, %{status: status}} when status in 200..299 ->
           :ok
@@ -78,21 +82,42 @@ defmodule F1Bot.ExternalApi.Fluxer do
     end
   end
 
-  defp token do
+  @doc "The bot token, or `{:error, :no_fluxer_bot_token}`."
+  def bot_token do
     case F1Bot.get_env(:fluxer_bot_token) do
       token when is_binary(token) and token != "" -> {:ok, token}
       _ -> {:error, :no_fluxer_bot_token}
     end
   end
 
-  # REST base: FLUXER_API_BASE if set, else <FLUXER_ORIGIN>/api.
-  defp api_base do
+  @doc "REST base: `FLUXER_API_BASE` if set, else `<FLUXER_ORIGIN>/api`."
+  def api_base do
     cond do
       base = present(F1Bot.get_env(:fluxer_api_base)) ->
         {:ok, String.trim_trailing(base, "/")}
 
       origin = present(F1Bot.get_env(:fluxer_origin)) ->
         {:ok, String.trim_trailing(origin, "/") <> "/api"}
+
+      true ->
+        {:error, :no_fluxer_origin}
+    end
+  end
+
+  @doc "Websocket gateway URL: `FLUXER_GATEWAY` if set, else derived from origin."
+  def gateway_url do
+    cond do
+      gw = present(F1Bot.get_env(:fluxer_gateway)) ->
+        {:ok, String.trim_trailing(gw, "/")}
+
+      origin = present(F1Bot.get_env(:fluxer_origin)) ->
+        ws =
+          origin
+          |> String.trim_trailing("/")
+          |> String.replace_prefix("https://", "wss://")
+          |> String.replace_prefix("http://", "ws://")
+
+        {:ok, ws <> "/gateway"}
 
       true ->
         {:error, :no_fluxer_origin}

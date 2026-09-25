@@ -58,7 +58,10 @@ config :f1_bot,
 config :f1_bot,
   fluxer_origin: System.get_env("FLUXER_ORIGIN"),
   fluxer_api_base: System.get_env("FLUXER_API_BASE"),
+  fluxer_gateway: System.get_env("FLUXER_GATEWAY"),
   fluxer_bot_token: System.get_env("FLUXER_BOT_TOKEN"),
+  # Language for command replies (en/pt/fr/it/de/es); the live feed is unchanged.
+  fluxer_locale: System.get_env("FLUXER_LOCALE", "en") |> String.to_atom(),
   fluxer_channel_ids_messages:
     System.get_env("FLUXER_CHANNEL_IDS_MESSAGES", "") |> str_to_list.() |> list_to_int.(),
   fluxer_channel_ids_radios:
@@ -68,9 +71,10 @@ if config_env() == :prod do
   unless demo_mode_enabled do
     config :f1_bot,
       connect_to_signalr: true,
-      # Fluxer port: output goes to Fluxer over REST. The Discord gateway and
-      # slash commands (Nostrum) are not started; commands are a later phase.
+      # Fluxer port: output goes to Fluxer over REST, and the Fluxer gateway
+      # client handles `!` prefix commands. The Discord side (Nostrum) is off.
       start_discord: false,
+      fluxer_commands: System.get_env("FLUXER_COMMANDS", "true") == "true",
       discord_api_module: F1Bot.ExternalApi.Fluxer
   end
 
