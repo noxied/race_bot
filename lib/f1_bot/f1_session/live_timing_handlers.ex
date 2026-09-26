@@ -134,6 +134,14 @@ defmodule F1Bot.F1Session.LiveTimingHandlers do
     LiveTimingHandlers.TimingData.process_packet(session, packet, options)
   end
 
+  defp process_for_topic(session, packet = %Packet{topic: "TeamRadio"}, options) do
+    if F1Bot.get_env(:fluxer_radio_clips, false) do
+      LiveTimingHandlers.TeamRadio.process_packet(session, packet, options)
+    else
+      {:ok, %ProcessingResult{session: session, events: []}}
+    end
+  end
+
   defp process_for_topic(session, packet = %Packet{topic: "RaceControlMessages"}, options) do
     LiveTimingHandlers.RaceControlMessages.process_packet(session, packet, options)
   end

@@ -82,6 +82,71 @@ defmodule F1Bot.ExternalApi.Fluxer do
     end
   end
 
+  @doc """
+  Posts a message with an audio file attached (multipart), used for team radio
+  clips. `content` is the caption, `binary` the mp3 bytes.
+  """
+  def post_audio_clip(channel_id, content, filename, binary) do
+    with {:ok, base} <- api_base(),
+         {:ok, token} <- bot_token() do
+      url = "#{base}/v1/channels/#{channel_id}/messages"
+      boundary = "f1bot" <> Integer.to_string(System.unique_integer([:positive]))
+      payload_json = Jason.encode!(%{content: content, attachments: [%{id: 0, filename: filename}]})
+
+      headers = [
+        {"authorization", "Bot #{token}"},
+        {"content-type", "multipart/form-data; boundary=#{boundary}"}
+      ]
+
+      body = multipart_body(boundary, payload_json, filename, binary)
+
+      case Finch.build(:post, url, headers, body)
+           |> Finch.request(@finch, receive_timeout: 30_000) do
+        {:ok, %{status: status}} when status in 200..299 ->
+          :ok
+
+        {:ok, %{status: status, body: resp_body}} ->
+          {:error, {:http_error, status, resp_body}}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end
+  end
+
+  defp multipart_body(boundary, payload_json, filename, binary) do
+    crlf = "\r\n"
+
+    IO.iodata_to_binary([
+      "--",
+      boundary,
+      crlf,
+      "content-disposition: form-data; name=\"payload_json\"",
+      crlf,
+      "content-type: application/json",
+      crlf,
+      crlf,
+      payload_json,
+      crlf,
+      "--",
+      boundary,
+      crlf,
+      "content-disposition: form-data; name=\"files[0]\"; filename=\"",
+      filename,
+      "\"",
+      crlf,
+      "content-type: audio/mpeg",
+      crlf,
+      crlf,
+      binary,
+      crlf,
+      "--",
+      boundary,
+      "--",
+      crlf
+    ])
+  end
+
   @doc "The bot token, or `{:error, :no_fluxer_bot_token}`."
   def bot_token do
     case F1Bot.get_env(:fluxer_bot_token) do

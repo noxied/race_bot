@@ -62,6 +62,8 @@ config :f1_bot,
   fluxer_bot_token: System.get_env("FLUXER_BOT_TOKEN"),
   # Language for command replies (en/pt/fr/it/de/es); the live feed is unchanged.
   fluxer_locale: System.get_env("FLUXER_LOCALE", "en") |> String.to_atom(),
+  # Post team radio as audio clips to the radio channels (off by default).
+  fluxer_radio_clips: System.get_env("FLUXER_RADIO_CLIPS", "false") == "true",
   fluxer_channel_ids_messages:
     System.get_env("FLUXER_CHANNEL_IDS_MESSAGES", "") |> str_to_list.() |> list_to_int.(),
   fluxer_channel_ids_radios:

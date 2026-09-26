@@ -50,6 +50,8 @@ defmodule F1Bot.Application do
       |> add_if_feature_flag_enabled(:start_discord, F1Bot.ExternalApi.Discord.Commands)
       # Fluxer gateway client for `!` prefix commands.
       |> add_if_feature_flag_enabled(:fluxer_commands, F1Bot.ExternalApi.Fluxer.Gateway)
+      # Team radio audio clips posted to the Fluxer radio channels.
+      |> add_if_feature_flag_enabled(:fluxer_radio_clips, F1Bot.Output.TeamRadio)
       |> add_if_demo_mode_enabled(F1Bot.Demo.Supervisor)
 
     # See https://hexdocs.pm/elixir/Supervisor.html
