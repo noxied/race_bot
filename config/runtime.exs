@@ -64,6 +64,10 @@ config :f1_bot,
   fluxer_locale: System.get_env("FLUXER_LOCALE", "en") |> String.to_atom(),
   # Post team radio as audio clips to the radio channels (off by default).
   fluxer_radio_clips: System.get_env("FLUXER_RADIO_CLIPS", "false") == "true",
+  # Optional role pings (off unless set): session start and red flag. Mentions are
+  # restricted to the given role only, never @everyone.
+  fluxer_ping_sessions_role: System.get_env("FLUXER_PING_SESSIONS_ROLE"),
+  fluxer_ping_redflag_role: System.get_env("FLUXER_PING_REDFLAG_ROLE"),
   fluxer_channel_ids_messages:
     System.get_env("FLUXER_CHANNEL_IDS_MESSAGES", "") |> str_to_list.() |> list_to_int.(),
   fluxer_channel_ids_radios:

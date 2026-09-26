@@ -8,6 +8,7 @@ defmodule F1Bot.ExternalApi.Discord.Console do
       case message_or_tuple do
         {:embed, embed} -> "[embed] #{embed[:title]} - #{embed[:description]}"
         {:embed, _type, embed} -> "[embed] #{embed[:title]} - #{embed[:description]}"
+        {:embed_ping, _role, embed} -> "[embed+ping] #{embed[:title]} - #{embed[:description]}"
         {_type, message} -> message
         message -> message
       end

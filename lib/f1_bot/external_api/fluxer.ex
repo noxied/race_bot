@@ -18,6 +18,32 @@ defmodule F1Bot.ExternalApi.Fluxer do
   @finch F1Bot.Finch
 
   @impl F1Bot.ExternalApi.Discord
+  # Post an embed to the message channels while pinging a single role, restricting
+  # mentions to that role only (never @everyone).
+  def post_message({:embed_ping, role_id, embed}) do
+    channel_ids = F1Bot.get_env(:fluxer_channel_ids_messages, [])
+    role = to_string(role_id)
+
+    body = %{
+      content: "<@&#{role}>",
+      embeds: [embed],
+      allowed_mentions: %{parse: [], roles: [role]}
+    }
+
+    Logger.info(
+      "[FLUXER] [embed+ping @#{role}] #{embed[:title]} (to channels: #{inspect(channel_ids)})"
+    )
+
+    for channel_id <- channel_ids do
+      case post_to_channel(channel_id, body) do
+        :ok -> :ok
+        {:error, err} -> Logger.error("Failed to post Fluxer message to #{channel_id}: #{inspect(err)}")
+      end
+    end
+
+    :ok
+  end
+
   def post_message(message_or_tuple) do
     {type, payload} =
       case message_or_tuple do

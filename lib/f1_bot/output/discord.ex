@@ -226,10 +226,14 @@ defmodule F1Bot.Output.Discord do
         },
         state
       ) do
+    # A new session (type changed) vs a later segment of the same session, e.g.
+    # Q1 -> Q2 -> Q3 all report "started". Ping only on the actual session start.
+    is_new_session = state.session_type != session_type
+
     state =
-      if state.session_type == session_type,
-        do: state,
-        else: %{state | session_type: session_type, segments_done: 0}
+      if is_new_session,
+        do: %{state | session_type: session_type, segments_done: 0},
+        else: state
 
     embed = %{
       type: "rich",
@@ -238,7 +242,8 @@ defmodule F1Bot.Output.Discord do
       description: "Session just started"
     }
 
-    F1Bot.ExternalApi.Discord.post_message({:embed, embed})
+    role = if is_new_session, do: ping_role(:fluxer_ping_sessions_role), else: nil
+    post_embed(embed, role)
 
     {:noreply, state}
   end
@@ -266,7 +271,8 @@ defmodule F1Bot.Output.Discord do
           description: "#{source_prefix(source)}#{message}"
         }
 
-        F1Bot.ExternalApi.Discord.post_message({:embed, embed})
+        role = if flag == :red, do: ping_role(:fluxer_ping_redflag_role), else: nil
+        post_embed(embed, role)
 
       nil ->
         emoji = resolve_emoji(:announcement, "📢")
@@ -339,6 +345,20 @@ defmodule F1Bot.Output.Discord do
   end
 
   defp resolve_emoji(key, fallback), do: F1Bot.ExternalApi.Discord.get_emoji_or_default(key, fallback)
+
+  # Post an embed, optionally pinging a role (session start / red flag). When no
+  # role is configured it posts a plain embed, so pings are off by default.
+  defp post_embed(embed, nil), do: F1Bot.ExternalApi.Discord.post_message({:embed, embed})
+
+  defp post_embed(embed, role),
+    do: F1Bot.ExternalApi.Discord.post_message({:embed_ping, role, embed})
+
+  defp ping_role(key) do
+    case F1Bot.get_env(key) do
+      role when is_binary(role) and role != "" -> role
+      _ -> nil
+    end
+  end
 
   defp source_prefix(:stewards), do: "FIA Stewards: "
   defp source_prefix(:stewards_correction), do: "FIA Stewards correction: "
