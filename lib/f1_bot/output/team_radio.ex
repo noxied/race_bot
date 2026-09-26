@@ -78,6 +78,8 @@ defmodule F1Bot.Output.TeamRadio do
     filename = payload.path |> to_string() |> Path.basename()
     channels = F1Bot.get_env(:fluxer_channel_ids_radios, [])
 
+    Logger.info("[TEAM RADIO] #{caption} (#{filename}) -> channels #{inspect(channels)}")
+
     case download(payload.audio_url) do
       {:ok, binary} ->
         for ch <- channels do
