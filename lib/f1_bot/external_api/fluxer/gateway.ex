@@ -37,7 +37,7 @@ defmodule F1Bot.ExternalApi.Fluxer.Gateway do
   defp connect(state) do
     with {:ok, gateway} <- Fluxer.gateway_url(),
          {:ok, _token} <- Fluxer.bot_token() do
-      uri = "#{gateway}?v=1&encoding=json"
+      uri = "#{ensure_path(gateway)}?v=1&encoding=json"
       Logger.info("Fluxer Gateway: connecting to #{uri}")
 
       {:ok, pid} =
@@ -146,5 +146,12 @@ defmodule F1Bot.ExternalApi.Fluxer.Gateway do
 
   defp send_ws(message) do
     WSClient.send({:text, Jason.encode!(message)})
+  end
+
+  # Ensure the gateway URL has a path before the query string. Single-origin
+  # instances give a path (".../gateway"); a dedicated gateway host may not
+  # ("wss://gateway.fluxer.app"), and "host?query" can confuse the WS client.
+  defp ensure_path(url) do
+    if url =~ ~r{://[^/]+/}, do: url, else: url <> "/"
   end
 end
