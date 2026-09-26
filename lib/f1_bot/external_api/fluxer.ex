@@ -90,11 +90,16 @@ defmodule F1Bot.ExternalApi.Fluxer do
     end
   end
 
-  @doc "REST base: `FLUXER_API_BASE` if set, else `<FLUXER_ORIGIN>/api`."
+  @doc """
+  REST base: `FLUXER_API_BASE` if set, else `<FLUXER_ORIGIN>/api`. A trailing
+  `/v1` is stripped so the base works whether or not it already includes the API
+  version (the message path always appends `/v1/channels/...`). Self-hosted uses a
+  single origin (`.../api`); the official instance uses `https://api.fluxer.app`.
+  """
   def api_base do
     cond do
       base = present(F1Bot.get_env(:fluxer_api_base)) ->
-        {:ok, String.trim_trailing(base, "/")}
+        {:ok, base |> String.trim_trailing("/") |> String.replace_suffix("/v1", "")}
 
       origin = present(F1Bot.get_env(:fluxer_origin)) ->
         {:ok, String.trim_trailing(origin, "/") <> "/api"}
