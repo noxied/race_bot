@@ -5,6 +5,11 @@ defmodule F1Bot.F1Session.RaceControl do
   use TypedStruct
   alias F1Bot.F1Session
 
+  # A reconnect during a short outage misses only a handful of messages. Anything
+  # larger is a stale/cold reconnect (e.g. the feed re-serving a whole past
+  # session), so it is absorbed silently instead of dumped into the channel.
+  @max_backfill 8
+
   typedstruct do
     @typedoc "Race Control messages"
 
@@ -53,7 +58,18 @@ defmodule F1Bot.F1Session.RaceControl do
         Enum.reject(incoming, fn m -> MapSet.member?(content, content_key(m)) end)
       end
 
-    push_messages(race_control, fresh)
+    cond do
+      fresh == [] ->
+        {race_control, []}
+
+      length(fresh) > @max_backfill ->
+        # Too many missed messages to be a real in-session gap. Absorb them into
+        # history (so they are not re-posted on the next reconnect) but emit none.
+        {%{race_control | messages: race_control.messages ++ fresh}, []}
+
+      true ->
+        push_messages(race_control, fresh)
+    end
   end
 
   defp content_key(m), do: {m.flag, m.message, m.source}
