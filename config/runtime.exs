@@ -73,6 +73,18 @@ config :f1_bot,
   fluxer_channel_ids_radios:
     System.get_env("FLUXER_CHANNEL_IDS_RADIOS", "") |> str_to_list.() |> list_to_int.()
 
+# Session highlights: after a session is finalised, look up the official video on
+# the FORMULA 1 YouTube channel and post the link to the message channels. Off
+# unless HIGHLIGHTS_ENABLED=true and a YOUTUBE_API_KEY is set.
+config :f1_bot,
+  highlights_enabled: System.get_env("HIGHLIGHTS_ENABLED", "false") == "true",
+  youtube_api_key: System.get_env("YOUTUBE_API_KEY"),
+  youtube_channel_id: System.get_env("YOUTUBE_CHANNEL_ID"),
+  highlights_poll_minutes:
+    String.to_integer(System.get_env("HIGHLIGHTS_POLL_MINUTES", "20")),
+  highlights_max_attempts:
+    String.to_integer(System.get_env("HIGHLIGHTS_MAX_ATTEMPTS", "15"))
+
 if config_env() == :prod do
   unless demo_mode_enabled do
     config :f1_bot,

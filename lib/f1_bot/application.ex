@@ -52,6 +52,8 @@ defmodule F1Bot.Application do
       |> add_if_feature_flag_enabled(:fluxer_commands, F1Bot.ExternalApi.Fluxer.Gateway)
       # Team radio audio clips posted to the Fluxer radio channels.
       |> add_if_feature_flag_enabled(:fluxer_radio_clips, F1Bot.Output.TeamRadio)
+      # Posts the official highlights video link when a session is finalised.
+      |> add_if_feature_flag_enabled(:highlights_enabled, F1Bot.Output.Highlights)
       |> add_if_demo_mode_enabled(F1Bot.Demo.Supervisor)
 
     # See https://hexdocs.pm/elixir/Supervisor.html
