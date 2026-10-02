@@ -40,6 +40,11 @@ defmodule F1Bot.Output.Highlights do
       api_key() == nil ->
         {:noreply, state}
 
+      not highlights_session?(session_type) ->
+        # Practice sessions do not get official highlights, so skip them rather
+        # than poll (and burn API quota) for a video that never appears.
+        {:noreply, state}
+
       MapSet.member?(state.done, key) or Map.has_key?(state.pending, key) ->
         {:noreply, state}
 
@@ -170,6 +175,10 @@ defmodule F1Bot.Output.Highlights do
   end
 
   # ---- title matching -----------------------------------------------------
+
+  defp highlights_session?(type) do
+    type in ["Race", "Qualifying", "Sprint", "Sprint Qualifying", "Sprint Shootout"]
+  end
 
   defp simple_label(type) do
     cond do
