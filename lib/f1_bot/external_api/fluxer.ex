@@ -94,17 +94,8 @@ defmodule F1Bot.ExternalApi.Fluxer do
         {"content-type", "application/json"}
       ]
 
-      case Finch.build(:post, url, headers, Jason.encode!(body))
-           |> Finch.request(@finch, receive_timeout: 15_000) do
-        {:ok, %{status: status}} when status in 200..299 ->
-          :ok
-
-        {:ok, %{status: status, body: resp_body}} ->
-          {:error, {:http_error, status, resp_body}}
-
-        {:error, reason} ->
-          {:error, reason}
-      end
+      Finch.build(:post, url, headers, Jason.encode!(body))
+      |> request_with_retry(15_000)
     end
   end
 
@@ -126,18 +117,76 @@ defmodule F1Bot.ExternalApi.Fluxer do
 
       body = multipart_body(boundary, payload_json, filename, binary)
 
-      case Finch.build(:post, url, headers, body)
-           |> Finch.request(@finch, receive_timeout: 30_000) do
-        {:ok, %{status: status}} when status in 200..299 ->
-          :ok
-
-        {:ok, %{status: status, body: resp_body}} ->
-          {:error, {:http_error, status, resp_body}}
-
-        {:error, reason} ->
-          {:error, reason}
-      end
+      Finch.build(:post, url, headers, body)
+      |> request_with_retry(30_000)
     end
+  end
+
+  # Sends a built request, retrying transient failures so a dropped connection
+  # ("terminated") or a 5xx (common when the instance is overloaded or under a
+  # DDoS) does not silently drop a live message. Retries network errors, 429 and
+  # 5xx with backoff; 4xx (other than 429) fail fast. A 2xx returns `:ok`.
+  # Note: a POST cut after the server accepted it may be re-sent, so a rare
+  # duplicate is possible, which is preferred over losing a race-control post.
+  @max_send_attempts 4
+
+  defp request_with_retry(req, timeout, attempt \\ 1) do
+    case Finch.request(req, @finch, receive_timeout: timeout) do
+      {:ok, %{status: status}} when status in 200..299 ->
+        :ok
+
+      {:ok, %{status: status} = resp} when status == 429 or status >= 500 ->
+        if attempt < @max_send_attempts do
+          Logger.warning(
+            "[FLUXER] HTTP #{status}, retrying (#{attempt}/#{@max_send_attempts - 1})"
+          )
+
+          Process.sleep(send_backoff(resp, attempt))
+          request_with_retry(req, timeout, attempt + 1)
+        else
+          {:error, {:http_error, status, resp.body}}
+        end
+
+      {:ok, %{status: status, body: resp_body}} ->
+        {:error, {:http_error, status, resp_body}}
+
+      {:error, reason} ->
+        if attempt < @max_send_attempts do
+          Logger.warning(
+            "[FLUXER] request failed (#{inspect(reason)}), retrying (#{attempt}/#{@max_send_attempts - 1})"
+          )
+
+          Process.sleep(backoff_ms(attempt))
+          request_with_retry(req, timeout, attempt + 1)
+        else
+          {:error, reason}
+        end
+    end
+  end
+
+  # For 429, honour Retry-After / x-ratelimit-reset-after; otherwise back off.
+  defp send_backoff(%{status: 429, headers: headers}, attempt) do
+    retry_after_ms(headers) || backoff_ms(attempt)
+  end
+
+  defp send_backoff(_resp, attempt), do: backoff_ms(attempt)
+
+  defp backoff_ms(attempt), do: min(5_000, 500 * Integer.pow(2, attempt - 1))
+
+  defp retry_after_ms(headers) do
+    value =
+      header_value(headers, "retry-after") || header_value(headers, "x-ratelimit-reset-after")
+
+    with v when is_binary(v) <- value,
+         {secs, _} <- Float.parse(v) do
+      trunc(secs * 1000) |> max(0) |> min(10_000)
+    else
+      _ -> nil
+    end
+  end
+
+  defp header_value(headers, key) do
+    Enum.find_value(headers, fn {k, v} -> if String.downcase(k) == key, do: v end)
   end
 
   defp multipart_body(boundary, payload_json, filename, binary) do

@@ -7,8 +7,12 @@ defmodule F1Bot.ExternalApi.Fluxer.Gateway do
   Protocol (https://docs.fluxer.app/gateway): receive Hello (op 10) with
   `heartbeat_interval`, then send Identify (op 2) and a periodic Heartbeat
   (op 1, `d` = last dispatch sequence). Dispatches arrive as op 0 with `t`/`s`/`d`.
-  On Reconnect (op 7) or Invalid Session (op 9) the process stops and is restarted
-  by the supervisor, which reconnects and re-identifies.
+
+  The websocket process is monitored (not linked): when it drops, or on a
+  Reconnect (op 7) / Invalid Session (op 9), this process stays alive and
+  reconnects with exponential backoff (reset once READY arrives). This keeps a
+  flapping connection, e.g. during a DDoS, from hammering the instance or
+  crash-looping the supervisor.
   """
   use GenServer
   require Logger
@@ -18,6 +22,9 @@ defmodule F1Bot.ExternalApi.Fluxer.Gateway do
 
   @supervisor F1Bot.DynamicSupervisor
 
+  @reconnect_base_ms 1_000
+  @reconnect_max_ms 30_000
+
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
 
   def ws_handle_connected, do: GenServer.cast(__MODULE__, :ws_connected)
@@ -25,7 +32,15 @@ defmodule F1Bot.ExternalApi.Fluxer.Gateway do
 
   @impl true
   def init(_opts) do
-    state = %{ws_pid: nil, heartbeat_interval: nil, last_seq: nil, session_id: nil}
+    state = %{
+      ws_pid: nil,
+      ws_ref: nil,
+      hb_tref: nil,
+      last_seq: nil,
+      session_id: nil,
+      reconnects: 0
+    }
+
     {:ok, state, {:continue, :connect}}
   end
 
@@ -35,19 +50,29 @@ defmodule F1Bot.ExternalApi.Fluxer.Gateway do
   end
 
   defp connect(state) do
+    state = cancel_heartbeat(state)
+
     with {:ok, gateway} <- Fluxer.gateway_url(),
          {:ok, _token} <- Fluxer.bot_token() do
       uri = "#{ensure_path(gateway)}?v=1&encoding=json"
       Logger.info("Fluxer Gateway: connecting to #{uri}")
 
-      {:ok, pid} =
-        DynamicSupervisor.start_child(
-          @supervisor,
-          {WSClient, [uri: uri, state: %{}, opts: [name: WSClient.name()]]}
-        )
+      child = {WSClient, [uri: uri, state: %{}, opts: [name: WSClient.name()]]}
 
-      Process.link(pid)
-      %{state | ws_pid: pid}
+      case DynamicSupervisor.start_child(@supervisor, child) do
+        {:ok, pid} ->
+          ref = Process.monitor(pid)
+          %{state | ws_pid: pid, ws_ref: ref}
+
+        {:error, {:already_started, pid}} ->
+          # A stale client is still registered; stop it and retry shortly.
+          DynamicSupervisor.terminate_child(@supervisor, pid)
+          schedule_reconnect(state)
+
+        {:error, reason} ->
+          Logger.error("Fluxer Gateway: start failed (#{inspect(reason)})")
+          schedule_reconnect(state)
+      end
     else
       err ->
         Logger.error("Fluxer Gateway: not connecting (#{inspect(err)}); commands disabled")
@@ -80,8 +105,22 @@ defmodule F1Bot.ExternalApi.Fluxer.Gateway do
     {:noreply, state}
   end
 
+  # The websocket process went down: reconnect with backoff.
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %{ws_ref: ref} = state) do
+    Logger.warning("Fluxer Gateway: websocket down (#{inspect(reason)}); reconnecting")
+    state = %{state | ws_pid: nil, ws_ref: nil} |> cancel_heartbeat()
+    {:noreply, schedule_reconnect(state)}
+  end
+
+  def handle_info({:DOWN, _ref, :process, _pid, _reason}, state), do: {:noreply, state}
+
+  # Scheduled reconnect (either a backoff tick or a server-requested reconnect).
+  def handle_info(:connect, state) do
+    {:noreply, connect(state)}
+  end
+
   def handle_info(:reconnect, state) do
-    {:stop, :reconnect, state}
+    {:noreply, state |> stop_ws() |> connect()}
   end
 
   # ---- gateway opcodes ----------------------------------------------------
@@ -89,15 +128,16 @@ defmodule F1Bot.ExternalApi.Fluxer.Gateway do
   # Hello: start heartbeats and identify.
   defp dispatch(%{"op" => 10, "d" => %{"heartbeat_interval" => interval}}, state) do
     Logger.info("Fluxer Gateway: Hello (heartbeat #{interval}ms)")
-    :timer.send_interval(interval, :heartbeat)
+    state = cancel_heartbeat(state)
+    {:ok, tref} = :timer.send_interval(interval, :heartbeat)
     identify()
-    %{state | heartbeat_interval: interval}
+    %{state | hb_tref: tref}
   end
 
   # Heartbeat ACK
   defp dispatch(%{"op" => 11}, state), do: state
 
-  # Reconnect / Invalid Session: stop and let the supervisor restart us.
+  # Reconnect / Invalid Session: drop the socket and reconnect.
   defp dispatch(%{"op" => op}, state) when op in [7, 9] do
     Logger.warning("Fluxer Gateway: reconnect requested (op #{op})")
     send(self(), :reconnect)
@@ -116,7 +156,7 @@ defmodule F1Bot.ExternalApi.Fluxer.Gateway do
   defp handle_event("READY", data, state) do
     username = get_in(data, ["user", "username"])
     Logger.info("Fluxer Gateway: READY as #{username}")
-    %{state | session_id: data["session_id"]}
+    %{state | session_id: data["session_id"], reconnects: 0}
   end
 
   defp handle_event("MESSAGE_CREATE", data, state) do
@@ -146,6 +186,32 @@ defmodule F1Bot.ExternalApi.Fluxer.Gateway do
 
   defp send_ws(message) do
     WSClient.send({:text, Jason.encode!(message)})
+  end
+
+  # Stop the current websocket process (demonitoring it so its :DOWN does not
+  # trigger a second reconnect) and clear the heartbeat.
+  defp stop_ws(state) do
+    if state.ws_ref, do: Process.demonitor(state.ws_ref, [:flush])
+
+    if state.ws_pid && Process.alive?(state.ws_pid) do
+      DynamicSupervisor.terminate_child(@supervisor, state.ws_pid)
+    end
+
+    %{state | ws_pid: nil, ws_ref: nil} |> cancel_heartbeat()
+  end
+
+  defp schedule_reconnect(state) do
+    delay = min(@reconnect_max_ms, @reconnect_base_ms * Integer.pow(2, min(state.reconnects, 5)))
+    Logger.info("Fluxer Gateway: reconnecting in #{delay}ms")
+    Process.send_after(self(), :connect, delay)
+    %{state | reconnects: state.reconnects + 1}
+  end
+
+  defp cancel_heartbeat(%{hb_tref: nil} = state), do: state
+
+  defp cancel_heartbeat(%{hb_tref: tref} = state) do
+    :timer.cancel(tref)
+    %{state | hb_tref: nil}
   end
 
   # Ensure the gateway URL has a path before the query string. Single-origin
