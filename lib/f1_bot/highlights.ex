@@ -71,6 +71,17 @@ defmodule F1Bot.Highlights do
     |> Repo.insert(on_conflict: :nothing, conflict_target: :video_id)
   end
 
+  @doc "Whether a session is already in the catalogue (used to avoid reposting)."
+  def catalogued?(series, gp_name, session_type) do
+    query =
+      from(v in Video,
+        where:
+          v.series == ^series and v.gp_name == ^gp_name and v.session_type == ^session_type
+      )
+
+    Repo.aggregate(query, :count) > 0
+  end
+
   @doc "Catalogued videos for a GP (and year/series), oldest first."
   def lookup(series, gp_name, year) do
     pattern = "%#{gp_name}%"
