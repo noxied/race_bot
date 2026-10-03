@@ -13,6 +13,15 @@ end
 
 list_to_int = fn list -> for x <- list, do: String.to_integer(x) end
 
+# Reads an integer env var, falling back to the default when it is unset or an
+# empty string (e.g. referenced in compose but left blank).
+int_env = fn name, default ->
+  case System.get_env(name, "") |> String.trim() do
+    "" -> default
+    v -> String.to_integer(v)
+  end
+end
+
 demo_mode_url =
   case System.get_env("DEMO_MODE_URL", "") |> String.trim() do
     url = "http" <> _rest -> url
@@ -80,10 +89,8 @@ config :f1_bot,
   highlights_enabled: System.get_env("HIGHLIGHTS_ENABLED", "false") == "true",
   youtube_api_key: System.get_env("YOUTUBE_API_KEY"),
   youtube_channel_id: System.get_env("YOUTUBE_CHANNEL_ID"),
-  highlights_poll_minutes:
-    String.to_integer(System.get_env("HIGHLIGHTS_POLL_MINUTES", "20")),
-  highlights_max_attempts:
-    String.to_integer(System.get_env("HIGHLIGHTS_MAX_ATTEMPTS", "15"))
+  highlights_poll_minutes: int_env.("HIGHLIGHTS_POLL_MINUTES", 20),
+  highlights_max_attempts: int_env.("HIGHLIGHTS_MAX_ATTEMPTS", 15)
 
 if config_env() == :prod do
   unless demo_mode_enabled do
