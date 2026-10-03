@@ -91,6 +91,69 @@ defmodule F1Bot.Highlights do
     |> Repo.all()
   end
 
+  @doc "Most recently published catalogued video across all series, or nil."
+  def latest_overall do
+    Video
+    |> order_by([v], desc: v.published_at, desc: v.inserted_at)
+    |> limit(1)
+    |> Repo.one()
+  end
+
+  @doc """
+  Highlights for a GP: the catalogue first, else a YouTube search (results are
+  catalogued). Returns `{:ok, :cache | :youtube, videos}`, `:not_found`, or
+  `{:error, reason}`. `videos` are maps with series/gp_name/session_type/url.
+  """
+  def find_gp(series, gp_name, year) do
+    case lookup(series, gp_name, year) do
+      [] -> search_gp(series, gp_name, year)
+      videos -> {:ok, :cache, Enum.map(videos, &video_to_map/1)}
+    end
+  end
+
+  defp search_gp(series, gp_name, year) do
+    with key when is_binary(key) <- api_key(),
+         ch when is_binary(ch) <- channel_for_series(series),
+         {:ok, items} <- search_raw(ch, "#{gp_name} #{year} highlights", nil, 25, key, "relevance") do
+      results =
+        items
+        |> Enum.map(fn item ->
+          attrs = base_attrs(item)
+
+          case parse_title(attrs.title) do
+            {s, session, gp} -> Map.merge(attrs, %{series: s, session_type: session, gp_name: gp})
+            nil -> nil
+          end
+        end)
+        |> Enum.reject(&(is_nil(&1) or is_nil(&1.video_id)))
+        |> Enum.filter(fn a -> a.series == series and a.year == year and gp_match?(a.gp_name, gp_name) end)
+
+      Enum.each(results, &upsert/1)
+      if results == [], do: :not_found, else: {:ok, :youtube, results}
+    else
+      nil -> {:error, :not_configured}
+      {:error, _} = error -> error
+      _ -> :not_found
+    end
+  end
+
+  defp video_to_map(%Video{} = v) do
+    %{
+      series: v.series,
+      gp_name: v.gp_name,
+      session_type: v.session_type,
+      url: v.url,
+      title: v.title,
+      published_at: v.published_at
+    }
+  end
+
+  defp gp_match?(a, b) do
+    a = String.downcase(a || "")
+    b = String.downcase(b || "")
+    b != "" and (String.contains?(a, b) or String.contains?(b, a))
+  end
+
   @doc """
   Backfills the catalogue from the channel's recent uploads (default last 45
   days), detecting the series, session and GP from each title. Covers F1/F2/F3.
@@ -136,18 +199,19 @@ defmodule F1Bot.Highlights do
 
   # ---- youtube ------------------------------------------------------------
 
-  defp search_raw(channel_id, query, published_after, max, key) do
+  defp search_raw(channel_id, query, published_after, max, key, order \\ "date") do
     params =
-      URI.encode_query(%{
+      %{
         "part" => "snippet",
         "channelId" => channel_id,
         "q" => query,
         "type" => "video",
-        "order" => "date",
+        "order" => order,
         "maxResults" => to_string(max),
-        "publishedAfter" => DateTime.to_iso8601(published_after),
         "key" => key
-      })
+      }
+      |> maybe_put("publishedAfter", published_after && DateTime.to_iso8601(published_after))
+      |> URI.encode_query()
 
     case Finch.build(:get, "#{@search_url}?#{params}") |> Finch.request(@finch, receive_timeout: 15_000) do
       {:ok, %{status: 200, body: body}} ->
@@ -250,8 +314,8 @@ defmodule F1Bot.Highlights do
       String.contains?(lower, "sprint qualifying") or String.contains?(lower, "sprint shootout") ->
         "Sprint Qualifying"
 
-      String.contains?(lower, "feature race") -> "Feature Race"
-      String.contains?(lower, "sprint race") -> "Sprint Race"
+      String.contains?(lower, "feature race") -> "Feature Race" <> race_num(lower, "feature race")
+      String.contains?(lower, "sprint race") -> "Sprint Race" <> race_num(lower, "sprint race")
       String.contains?(lower, "sprint") -> "Sprint"
       String.contains?(lower, "qualifying") -> "Qualifying"
       String.contains?(lower, "race highlights") -> "Race"
@@ -283,6 +347,17 @@ defmodule F1Bot.Highlights do
       _ -> nil
     end
   end
+
+  # A trailing number on a Feature/Sprint Race (double-headers), e.g. " 2".
+  defp race_num(lower, phrase) do
+    case Regex.run(~r/#{phrase}\s+(\d+)/, lower) do
+      [_, n] -> " " <> n
+      _ -> ""
+    end
+  end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   defp parse_dt(nil), do: nil
 

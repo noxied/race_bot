@@ -52,6 +52,7 @@ defmodule F1Bot.ExternalApi.Fluxer.Commands do
   defp dispatch("tyres", _args, ch), do: reply_payload(ch, Tyres.payload(locale()))
   defp dispatch("teams", _args, ch), do: reply_payload(ch, Teams.payload(locale()))
   defp dispatch("drivers", _args, ch), do: reply_payload(ch, Drivers.payload(locale()))
+  defp dispatch("highlights", args, ch), do: reply(ch, %{content: highlights_reply(args)})
 
   defp dispatch(_unknown, _args, _ch), do: :ok
 
@@ -59,6 +60,60 @@ defmodule F1Bot.ExternalApi.Fluxer.Commands do
 
   defp reply_payload(ch, {:embeds, embeds}), do: reply(ch, %{embeds: embeds})
   defp reply_payload(ch, {:message, content}), do: reply(ch, %{content: content})
+
+  # ---- !highlights --------------------------------------------------------
+
+  defp highlights_reply([]) do
+    case F1Bot.Highlights.latest_overall() do
+      nil -> "Ainda não há highlights no catálogo."
+      v -> "🎬 **Últimos highlights · #{v.series} · #{v.gp_name} · #{v.session_type}**\n#{v.url}"
+    end
+  end
+
+  defp highlights_reply(args) do
+    {series, year, gp} = parse_highlights_args(args)
+
+    cond do
+      year == nil or gp == "" ->
+        "Uso: `!highlights` ou `!highlights <GP> <ano> [F1|F2|F3]`"
+
+      true ->
+        case F1Bot.Highlights.find_gp(series, gp, year) do
+          {:ok, _source, videos} -> format_highlights(series, gp, year, videos)
+          :not_found -> "Sem highlights para **#{series} · #{gp} #{year}**."
+          {:error, _} -> "Não consegui procurar agora, tenta mais tarde."
+        end
+    end
+  end
+
+  defp parse_highlights_args(args) do
+    year =
+      Enum.find_value(args, fn a ->
+        case Integer.parse(a) do
+          {y, ""} when y > 1900 -> y
+          _ -> nil
+        end
+      end)
+
+    series =
+      Enum.find_value(args, fn a -> if Regex.match?(~r/^f[123]$/i, a), do: String.upcase(a) end) || "F1"
+
+    gp =
+      args
+      |> Enum.reject(fn a -> a == to_string(year) or Regex.match?(~r/^f[123]$/i, a) end)
+      |> Enum.join(" ")
+
+    {series, year, gp}
+  end
+
+  defp format_highlights(series, gp, year, videos) do
+    lines =
+      videos
+      |> Enum.sort_by(&(&1.published_at || ~U[1970-01-01 00:00:00Z]), DateTime)
+      |> Enum.map_join("\n", fn v -> "• #{v.session_type}: #{v.url}" end)
+
+    "🎬 **Highlights · #{series} · #{gp} #{year}**\n#{lines}"
+  end
 
   defp reply(channel_id, body) do
     case Fluxer.post_to_channel(channel_id, body) do
@@ -71,7 +126,7 @@ defmodule F1Bot.ExternalApi.Fluxer.Commands do
     locale = locale()
 
     lines =
-      ["nextrace", "calendar", "weather", "positions", "tyres", "teams", "drivers", "ping", "help"]
+      ["nextrace", "calendar", "weather", "positions", "tyres", "teams", "drivers", "highlights", "ping", "help"]
       |> Enum.map_join("\n", &"`!#{&1}`")
 
     %{
