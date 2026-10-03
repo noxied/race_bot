@@ -71,15 +71,6 @@ defmodule F1Bot.Highlights do
     |> Repo.insert(on_conflict: :nothing, conflict_target: :video_id)
   end
 
-  @doc "Most recently published catalogued video for a series."
-  def latest(series \\ "F1") do
-    Video
-    |> where([v], v.series == ^series)
-    |> order_by([v], desc: v.published_at, desc: v.inserted_at)
-    |> limit(1)
-    |> Repo.one()
-  end
-
   @doc "Catalogued videos for a GP (and year/series), oldest first."
   def lookup(series, gp_name, year) do
     pattern = "%#{gp_name}%"
@@ -93,10 +84,11 @@ defmodule F1Bot.Highlights do
 
   @doc "Most recently published catalogued video across all series, or nil."
   def latest_overall do
+    # ecto_sqlite3 0.9.1 raises on `limit`, so order in SQL and take the head.
     Video
     |> order_by([v], desc: v.published_at, desc: v.inserted_at)
-    |> limit(1)
-    |> Repo.one()
+    |> Repo.all()
+    |> List.first()
   end
 
   @doc """
