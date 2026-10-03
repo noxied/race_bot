@@ -56,6 +56,7 @@ defmodule F1Bot.ExternalApi.Fluxer do
     channel_ids =
       case type do
         :radio -> F1Bot.get_env(:fluxer_channel_ids_radios, [])
+        :highlights -> highlights_channels()
         _ -> F1Bot.get_env(:fluxer_channel_ids_messages, [])
       end
 
@@ -266,6 +267,14 @@ defmodule F1Bot.ExternalApi.Fluxer do
 
       true ->
         {:error, :no_fluxer_origin}
+    end
+  end
+
+  # Highlights go to their own channel when configured, else the message channels.
+  defp highlights_channels do
+    case F1Bot.get_env(:fluxer_channel_ids_highlights, []) do
+      [] -> F1Bot.get_env(:fluxer_channel_ids_messages, [])
+      ids -> ids
     end
   end
 

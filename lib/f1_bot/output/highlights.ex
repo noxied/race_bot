@@ -171,7 +171,7 @@ defmodule F1Bot.Output.Highlights do
 
   defp post(gp_name, session_type, url) do
     message = "🎬 **Highlights oficiais · #{gp_name} · #{session_type}**\n#{url}"
-    F1Bot.ExternalApi.Discord.post_message(message)
+    F1Bot.ExternalApi.Discord.post_message({:highlights, message})
   end
 
   # ---- title matching -----------------------------------------------------

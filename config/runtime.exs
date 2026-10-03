@@ -80,7 +80,10 @@ config :f1_bot,
   fluxer_channel_ids_messages:
     System.get_env("FLUXER_CHANNEL_IDS_MESSAGES", "") |> str_to_list.() |> list_to_int.(),
   fluxer_channel_ids_radios:
-    System.get_env("FLUXER_CHANNEL_IDS_RADIOS", "") |> str_to_list.() |> list_to_int.()
+    System.get_env("FLUXER_CHANNEL_IDS_RADIOS", "") |> str_to_list.() |> list_to_int.(),
+  # Optional dedicated channel for highlights; falls back to the message channels.
+  fluxer_channel_ids_highlights:
+    System.get_env("FLUXER_CHANNEL_IDS_HIGHLIGHTS", "") |> str_to_list.() |> list_to_int.()
 
 # Session highlights: after a session is finalised, look up the official video on
 # the FORMULA 1 YouTube channel and post the link to the message channels. Off
