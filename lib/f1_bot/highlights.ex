@@ -2,10 +2,11 @@ defmodule F1Bot.Highlights do
   @moduledoc """
   YouTube lookup and local catalogue for official session highlights.
 
-  Searches the official channel for a given series (F1/F2/F3), matches the video
-  for a session by title, and stores what it finds in the `highlights` table so
-  later lookups (and the planned `!highlights` command) can be served from the DB
-  without spending API quota.
+  The official FORMULA 1 channel hosts F1, F2 and F3 highlights, so the series is
+  detected from the video title. The live worker catalogues F1 sessions as they
+  finalise; `backfill/1` catalogues every series' recent highlights from the same
+  channel. Stored rows serve later lookups (and the planned `!highlights`
+  command) without spending API quota.
   """
   require Logger
   import Ecto.Query
@@ -13,7 +14,8 @@ defmodule F1Bot.Highlights do
   alias F1Bot.Highlights.Video
 
   @search_url "https://www.googleapis.com/youtube/v3/search"
-  # Official FORMULA 1 channel; overridable with YOUTUBE_CHANNEL_ID.
+  # Official FORMULA 1 channel; overridable with YOUTUBE_CHANNEL_ID. It also hosts
+  # F2/F3, so F2/F3 fall back to it unless given their own channel id.
   @default_f1_channel_id "UCB_qr75-ydFVKSF9Dmo6izg"
   @finch F1Bot.Finch
 
@@ -23,12 +25,14 @@ defmodule F1Bot.Highlights do
   def poll_minutes, do: F1Bot.get_env(:highlights_poll_minutes, 20)
   def max_attempts, do: F1Bot.get_env(:highlights_max_attempts, 15)
 
-  @doc "YouTube channel id for a series (F1/F2/F3); nil if not configured."
+  @doc "YouTube channel id for a series; F2/F3 default to the F1 channel."
   def channel_for_series(series) do
+    default = present(F1Bot.get_env(:youtube_channel_id)) || @default_f1_channel_id
+
     case series |> to_string() |> String.upcase() do
-      "F2" -> present(F1Bot.get_env(:youtube_channel_id_f2))
-      "F3" -> present(F1Bot.get_env(:youtube_channel_id_f3))
-      _ -> present(F1Bot.get_env(:youtube_channel_id)) || @default_f1_channel_id
+      "F2" -> present(F1Bot.get_env(:youtube_channel_id_f2)) || default
+      "F3" -> present(F1Bot.get_env(:youtube_channel_id_f3)) || default
+      _ -> default
     end
   end
 
@@ -36,15 +40,19 @@ defmodule F1Bot.Highlights do
 
   @doc """
   Finds the highlights video for a finalised session. Returns `{:ok, attrs}`
-  (ready for `upsert/1`), `:not_found`, or `{:error, reason}`.
+  (ready for `upsert/1`), `:not_found`, or `{:error, reason}`. Only videos whose
+  title matches the given series are considered.
   """
   def find_for_session(series, gp_name, session_type, published_after) do
     with key when is_binary(key) <- api_key(),
          ch when is_binary(ch) <- channel_for_series(series),
          query = "#{gp_name} #{simple_label(session_type)} highlights",
          {:ok, items} <- search_raw(ch, query, published_after, 15, key),
-         %{} = item <- pick_match(items, gp_name, session_type) do
-      attrs = base_attrs(item, series) |> Map.merge(%{gp_name: gp_name, session_type: session_type})
+         %{} = item <- pick_match(items, series, gp_name, session_type) do
+      attrs =
+        base_attrs(item)
+        |> Map.merge(%{series: series, gp_name: gp_name, session_type: session_type})
+
       {:ok, attrs}
     else
       :not_found -> :not_found
@@ -85,14 +93,15 @@ defmodule F1Bot.Highlights do
 
   @doc """
   Backfills the catalogue from the channel's recent uploads (default last 45
-  days), parsing the session and GP from each title. Returns `{:ok, list}` of
-  `{gp_name, session_type, url}` catalogued. Run once per instance from iex.
+  days), detecting the series, session and GP from each title. Covers F1/F2/F3.
+  Returns `{:ok, list}` of `{series, gp_name, session_type, url}`. Run once per
+  instance from iex.
   """
-  def backfill(series \\ "F1", opts \\ []) do
+  def backfill(opts \\ []) do
     days = Keyword.get(opts, :days, 45)
 
     with key when is_binary(key) <- api_key(),
-         ch when is_binary(ch) <- channel_for_series(series) do
+         ch when is_binary(ch) <- channel_for_series("F1") do
       published_after =
         DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.add(-days * 86_400, :second)
 
@@ -101,18 +110,21 @@ defmodule F1Bot.Highlights do
           cataloged =
             items
             |> Enum.map(fn item ->
-              attrs = base_attrs(item, series)
+              attrs = base_attrs(item)
 
               case parse_title(attrs.title) do
-                {session, gp} -> Map.merge(attrs, %{session_type: session, gp_name: gp})
-                nil -> nil
+                {series, session, gp} ->
+                  Map.merge(attrs, %{series: series, session_type: session, gp_name: gp})
+
+                nil ->
+                  nil
               end
             end)
             |> Enum.reject(&(is_nil(&1) or is_nil(&1.video_id)))
 
           Enum.each(cataloged, &upsert/1)
-          Logger.info("[HIGHLIGHTS] backfill #{series}: #{length(cataloged)} videos cataloged")
-          {:ok, Enum.map(cataloged, &{&1.gp_name, &1.session_type, &1.url})}
+          Logger.info("[HIGHLIGHTS] backfill: #{length(cataloged)} videos cataloged")
+          {:ok, Enum.map(cataloged, &{&1.series, &1.gp_name, &1.session_type, &1.url})}
 
         error ->
           error
@@ -149,13 +161,12 @@ defmodule F1Bot.Highlights do
     end
   end
 
-  defp base_attrs(item, series) do
+  defp base_attrs(item) do
     video_id = get_in(item, ["id", "videoId"])
     title = item |> get_in(["snippet", "title"]) |> to_string()
     published_at = item |> get_in(["snippet", "publishedAt"]) |> parse_dt()
 
     %{
-      series: series,
       video_id: video_id,
       url: video_id && "https://www.youtube.com/watch?v=#{video_id}",
       title: title,
@@ -166,10 +177,10 @@ defmodule F1Bot.Highlights do
 
   # ---- title matching -----------------------------------------------------
 
-  # The official channel + publishedAfter already isolate the session's video;
-  # the title filter guards the session type, and the GP token is a final
-  # preference so a fitting result is chosen over one that merely matches.
-  defp pick_match(items, gp_name, session_type) do
+  # The channel + publishedAfter isolate the session's video; the series and
+  # title filters guard against F2/F3 clips and the wrong session type, and the
+  # GP token is a final preference.
+  defp pick_match(items, series, gp_name, session_type) do
     {phrases, excludes} = title_filter(session_type)
     gp_token = gp_name |> String.split() |> List.first() |> to_string() |> String.downcase()
 
@@ -178,6 +189,7 @@ defmodule F1Bot.Highlights do
         title = item_title(item)
 
         is_binary(get_in(item, ["id", "videoId"])) and
+          detect_series(title) == series and
           Enum.any?(phrases, &String.contains?(title, &1)) and
           not Enum.any?(excludes, &String.contains?(title, &1))
       end)
@@ -188,7 +200,17 @@ defmodule F1Bot.Highlights do
 
   defp item_title(item), do: item |> get_in(["snippet", "title"]) |> to_string() |> String.downcase()
 
-  # {accepted title phrases (any), excluded phrases (none)} — all lowercase.
+  # Series from a (lowercased) title; the F1 channel also posts F2/F3 clips.
+  defp detect_series(lower_title) do
+    cond do
+      lower_title =~ ~r/\bf3\b/ or String.contains?(lower_title, "formula 3") -> "F3"
+      lower_title =~ ~r/\bf2\b/ or String.contains?(lower_title, "formula 2") -> "F2"
+      true -> "F1"
+    end
+  end
+
+  # {accepted title phrases (any), excluded phrases (none)} — all lowercase. Used
+  # for the live F1 worker; series filtering keeps F2/F3 clips out separately.
   defp title_filter(type) do
     case type do
       "Race" -> {["race highlights"], ["sprint"]}
@@ -196,9 +218,6 @@ defmodule F1Bot.Highlights do
       "Sprint" -> {["sprint highlights"], ["qualifying", "shootout"]}
       "Sprint Qualifying" -> {["sprint qualifying highlights", "sprint shootout highlights"], []}
       "Sprint Shootout" -> {["sprint shootout highlights", "sprint qualifying highlights"], []}
-      "Practice 1" -> {["practice 1 highlights", "fp1 highlights"], []}
-      "Practice 2" -> {["practice 2 highlights", "fp2 highlights"], []}
-      "Practice 3" -> {["practice 3 highlights", "fp3 highlights"], []}
       _ -> {["highlights"], []}
     end
   end
@@ -212,15 +231,15 @@ defmodule F1Bot.Highlights do
     end
   end
 
-  # Parse the session and GP from a highlights title, e.g.
-  # "Race Highlights | 2026 Bahrain Grand Prix in Malaysia". nil when it is not a
-  # recognised session highlights clip.
+  # Parse {series, session, gp} from a highlights title, or nil when it is not a
+  # recognised session highlights clip. Handles F1 and F2/F3 session names.
   defp parse_title(title) do
     lower = String.downcase(title)
+    series = detect_series(lower)
     session = session_from_title(lower)
 
     if session != nil and String.contains?(lower, "highlights") do
-      {session, gp_from_title(title)}
+      {series, session, gp_from_title(title)}
     else
       nil
     end
@@ -231,12 +250,15 @@ defmodule F1Bot.Highlights do
       String.contains?(lower, "sprint qualifying") or String.contains?(lower, "sprint shootout") ->
         "Sprint Qualifying"
 
+      String.contains?(lower, "feature race") -> "Feature Race"
+      String.contains?(lower, "sprint race") -> "Sprint Race"
       String.contains?(lower, "sprint") -> "Sprint"
       String.contains?(lower, "qualifying") -> "Qualifying"
       String.contains?(lower, "race highlights") -> "Race"
       String.contains?(lower, "fp1") or String.contains?(lower, "practice 1") -> "Practice 1"
       String.contains?(lower, "fp2") or String.contains?(lower, "practice 2") -> "Practice 2"
       String.contains?(lower, "fp3") or String.contains?(lower, "practice 3") -> "Practice 3"
+      String.contains?(lower, "practice") -> "Practice"
       true -> nil
     end
   end
