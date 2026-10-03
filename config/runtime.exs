@@ -92,6 +92,9 @@ config :f1_bot,
   highlights_enabled: System.get_env("HIGHLIGHTS_ENABLED", "false") == "true",
   youtube_api_key: System.get_env("YOUTUBE_API_KEY"),
   youtube_channel_id: System.get_env("YOUTUBE_CHANNEL_ID"),
+  # Optional channels for other series, for the planned `!highlights` command.
+  youtube_channel_id_f2: System.get_env("YOUTUBE_CHANNEL_ID_F2"),
+  youtube_channel_id_f3: System.get_env("YOUTUBE_CHANNEL_ID_F3"),
   highlights_poll_minutes: int_env.("HIGHLIGHTS_POLL_MINUTES", 20),
   highlights_max_attempts: int_env.("HIGHLIGHTS_MAX_ATTEMPTS", 15)
 

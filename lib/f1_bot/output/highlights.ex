@@ -1,21 +1,17 @@
 defmodule F1Bot.Output.Highlights do
   @moduledoc """
   Posts the official session highlights video once it appears on the official
-  FORMULA 1 YouTube channel.
+  FORMULA 1 YouTube channel, and catalogues it in the `highlights` table.
 
-  When a session is finalised it starts polling the YouTube Data API (restricted
-  to the official channel, `publishedAfter` the session end, plus a title filter)
-  every `:highlights_poll_minutes`, up to `:highlights_max_attempts` times, and
-  posts the link to the first matching video. Only a link is posted, never a
-  download. Inert without a `:youtube_api_key`.
+  When a session is finalised it polls the YouTube Data API (via
+  `F1Bot.Highlights`) every `:highlights_poll_minutes`, up to
+  `:highlights_max_attempts` times, and posts the link to the highlights channel.
+  Only a link is posted, never a download. Inert without a `:youtube_api_key`.
   """
   use GenServer
   require Logger
 
-  @search_url "https://www.googleapis.com/youtube/v3/search"
-  # Official FORMULA 1 channel; overridable with YOUTUBE_CHANNEL_ID.
-  @default_channel_id "UCB_qr75-ydFVKSF9Dmo6izg"
-  @finch F1Bot.Finch
+  alias F1Bot.Highlights
 
   def start_link(init_arg), do: GenServer.start_link(__MODULE__, init_arg, name: __MODULE__)
 
@@ -37,12 +33,11 @@ defmodule F1Bot.Output.Highlights do
     key = {gp_name, session_type}
 
     cond do
-      api_key() == nil ->
+      Highlights.api_key() == nil ->
         {:noreply, state}
 
       not highlights_session?(session_type) ->
-        # Practice sessions do not get official highlights, so skip them rather
-        # than poll (and burn API quota) for a video that never appears.
+        # Practice sessions do not get official highlights; skip to save quota.
         {:noreply, state}
 
       MapSet.member?(state.done, key) or Map.has_key?(state.pending, key) ->
@@ -50,9 +45,7 @@ defmodule F1Bot.Output.Highlights do
 
       true ->
         Logger.info("[HIGHLIGHTS] #{gp_name} #{session_type} finalised; looking for highlights")
-        # Highlights are published after the session, so bound the search to just
-        # before it ended. A small margin covers clock skew without reaching back
-        # to a previous session's upload.
+
         published_after =
           DateTime.utc_now() |> DateTime.truncate(:second) |> DateTime.add(-900, :second)
 
@@ -79,10 +72,11 @@ defmodule F1Bot.Output.Highlights do
       search ->
         attempts = search.attempts + 1
 
-        case find_video(search) do
-          {:ok, url, title} ->
-            Logger.info("[HIGHLIGHTS] found: #{title} -> #{url}")
-            post(search.gp_name, search.session_type, url)
+        case Highlights.find_for_session("F1", search.gp_name, search.session_type, search.published_after) do
+          {:ok, attrs} ->
+            Highlights.upsert(attrs)
+            Logger.info("[HIGHLIGHTS] found: #{attrs.title} -> #{attrs.url}")
+            post(search.gp_name, search.session_type, attrs.url)
             {:noreply, drop(state, key, :done)}
 
           other ->
@@ -90,7 +84,7 @@ defmodule F1Bot.Output.Highlights do
               Logger.warning("[HIGHLIGHTS] search failed (#{inspect(elem(other, 1))})")
             end
 
-            if attempts >= max_attempts() do
+            if attempts >= Highlights.max_attempts() do
               Logger.info("[HIGHLIGHTS] giving up on #{elem(key, 0)} #{elem(key, 1)}")
               {:noreply, drop(state, key, :pending)}
             else
@@ -108,115 +102,16 @@ defmodule F1Bot.Output.Highlights do
 
   defp drop(state, key, :pending), do: %{state | pending: Map.delete(state.pending, key)}
 
-  # ---- polling ------------------------------------------------------------
-
   defp schedule_poll(key) do
-    Process.send_after(self(), {:poll, key}, poll_minutes() * 60_000)
+    Process.send_after(self(), {:poll, key}, Highlights.poll_minutes() * 60_000)
   end
-
-  defp find_video(%{gp_name: gp_name, session_type: session_type, published_after: published_after}) do
-    query =
-      URI.encode_query(%{
-        "part" => "snippet",
-        "channelId" => channel_id(),
-        "q" => "#{gp_name} #{simple_label(session_type)} highlights",
-        "type" => "video",
-        "order" => "date",
-        "maxResults" => "15",
-        "publishedAfter" => DateTime.to_iso8601(published_after),
-        "key" => api_key()
-      })
-
-    case Finch.build(:get, "#{@search_url}?#{query}") |> Finch.request(@finch, receive_timeout: 15_000) do
-      {:ok, %{status: 200, body: body}} ->
-        items = Jason.decode!(body) |> Map.get("items", [])
-        pick_match(items, gp_name, session_type)
-
-      {:ok, %{status: status, body: body}} ->
-        {:error, {:http, status, body}}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  # The official channel + `publishedAfter` already isolate this session's video;
-  # the title filter guards against the wrong session type, and the GP token is a
-  # final preference so a result that fits is chosen over one that merely matches.
-  defp pick_match(items, gp_name, session_type) do
-    {phrases, excludes} = title_filter(session_type)
-    gp_token = gp_name |> String.split() |> List.first() |> to_string() |> String.downcase()
-
-    matches =
-      Enum.filter(items, fn item ->
-        title = item_title(item)
-        Enum.any?(phrases, &String.contains?(title, &1)) and
-          not Enum.any?(excludes, &String.contains?(title, &1))
-      end)
-
-    item =
-      Enum.find(matches, fn item ->
-        gp_token != "" and String.contains?(item_title(item), gp_token)
-      end) || List.first(matches)
-
-    with %{} <- item,
-         vid when is_binary(vid) <- get_in(item, ["id", "videoId"]) do
-      {:ok, "https://www.youtube.com/watch?v=#{vid}", get_in(item, ["snippet", "title"])}
-    else
-      _ -> :not_found
-    end
-  end
-
-  defp item_title(item), do: item |> get_in(["snippet", "title"]) |> to_string() |> String.downcase()
 
   defp post(gp_name, session_type, url) do
     message = "🎬 **Highlights oficiais · #{gp_name} · #{session_type}**\n#{url}"
     F1Bot.ExternalApi.Discord.post_message({:highlights, message})
   end
 
-  # ---- title matching -----------------------------------------------------
-
   defp highlights_session?(type) do
     type in ["Race", "Qualifying", "Sprint", "Sprint Qualifying", "Sprint Shootout"]
   end
-
-  defp simple_label(type) do
-    cond do
-      String.contains?(type, "Sprint") -> "Sprint"
-      String.contains?(type, "Qualifying") -> "Qualifying"
-      String.contains?(type, "Practice") -> "Practice"
-      true -> type
-    end
-  end
-
-  # {accepted title phrases (any), excluded phrases (none)} — all lowercase.
-  defp title_filter(type) do
-    case type do
-      "Race" -> {["race highlights"], ["sprint"]}
-      "Qualifying" -> {["qualifying highlights"], ["sprint"]}
-      "Sprint" -> {["sprint highlights"], ["qualifying", "shootout"]}
-      "Sprint Qualifying" -> {["sprint qualifying highlights", "sprint shootout highlights"], []}
-      "Sprint Shootout" -> {["sprint shootout highlights", "sprint qualifying highlights"], []}
-      "Practice 1" -> {["practice 1 highlights", "fp1 highlights"], []}
-      "Practice 2" -> {["practice 2 highlights", "fp2 highlights"], []}
-      "Practice 3" -> {["practice 3 highlights", "fp3 highlights"], []}
-      _ -> {["highlights"], []}
-    end
-  end
-
-  # ---- config -------------------------------------------------------------
-
-  defp api_key, do: present(F1Bot.get_env(:youtube_api_key))
-  defp channel_id, do: present(F1Bot.get_env(:youtube_channel_id)) || @default_channel_id
-  defp poll_minutes, do: F1Bot.get_env(:highlights_poll_minutes, 20)
-  defp max_attempts, do: F1Bot.get_env(:highlights_max_attempts, 15)
-
-  defp present(s) when is_binary(s) do
-    case String.trim(s) do
-      "" -> nil
-      v -> v
-    end
-  end
-
-  defp present(_), do: nil
 end
